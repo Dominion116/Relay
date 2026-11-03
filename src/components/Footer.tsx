@@ -180,10 +180,10 @@ export const Footer: React.FC<Footer20Props> = ({
         </div>
 
         {/* Giant Text SVG watermark */}
-        <motion.div variants={giantTextVariant} className="w-full flex justify-center md:mt-auto pb-0 overflow-hidden">
+        <motion.div variants={giantTextVariant} className="w-full flex justify-center mt-6 sm:mt-10 md:mt-auto pb-0 overflow-hidden pointer-events-none select-none">
           <svg
-            className="w-full h-auto select-none transition-colors duration-300"
-            viewBox="0 30 380 80"
+            className="w-full max-w-[1200px] h-auto select-none transition-colors duration-300"
+            viewBox="0 0 540 120"
             preserveAspectRatio="xMidYMid meet"
             aria-label={brandName}
           >
@@ -197,17 +197,15 @@ export const Footer: React.FC<Footer20Props> = ({
               </linearGradient>
             </defs>
             <text
-              x="0"
-              y="125"
+              x="50%"
+              y="108"
               dominantBaseline="alphabetic"
-              textAnchor="start"
-              textLength="100%"
-              lengthAdjust="spacing"
+              textAnchor="middle"
               fill="url(#relay-watermark-gradient)"
-              className="font-semibold tracking-tighter"
-              fontSize="140"
+              className="font-bold tracking-tight"
+              fontSize="128"
             >
-              RELAY
+              {brandName ? brandName.toUpperCase() : 'RELAY'}
             </text>
           </svg>
         </motion.div>
