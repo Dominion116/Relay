@@ -350,68 +350,80 @@ console.log(data);`;
               <div>
                 {/* 4-Step Handshake Progress Indicators */}
                 <div className="mb-6">
-                  <span className="text-xs font-mono font-medium text-neutral-400 uppercase tracking-wider block mb-3">
+                  <span className="text-xs font-mono text-neutral-400 uppercase tracking-wider block mb-3 font-medium">
                     Protocol Handshake Execution
                   </span>
                   <div className="grid grid-cols-4 gap-2">
                     <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 1 ? 'bg-neutral-800/80 border-blue-500/60 text-blue-400' : 'bg-neutral-900/40 border-neutral-800 text-neutral-600'
+                      step >= 1 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
                     }`}>
-                      <div className="text-[10px] font-mono font-bold">STEP 1</div>
-                      <div className="text-xs font-medium truncate">1. POST</div>
+                      <div className="text-[10px] font-mono">STEP 1</div>
+                      <div className="text-xs truncate mt-0.5">1. Request</div>
                     </div>
                     <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 2 ? 'bg-neutral-800/80 border-amber-500/60 text-amber-400' : 'bg-neutral-900/40 border-neutral-800 text-neutral-600'
+                      step >= 2 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
                     }`}>
-                      <div className="text-[10px] font-mono font-bold">STEP 2</div>
-                      <div className="text-xs font-medium truncate">2. 402 Challenge</div>
+                      <div className="text-[10px] font-mono">STEP 2</div>
+                      <div className="text-xs truncate mt-0.5">2. 402 Challenge</div>
                     </div>
                     <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 3 ? 'bg-neutral-800/80 border-purple-500/60 text-purple-400' : 'bg-neutral-900/40 border-neutral-800 text-neutral-600'
+                      step >= 3 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
                     }`}>
-                      <div className="text-[10px] font-mono font-bold">STEP 3</div>
-                      <div className="text-xs font-medium truncate">3. EIP-712 Sign</div>
+                      <div className="text-[10px] font-mono">STEP 3</div>
+                      <div className="text-xs truncate mt-0.5">3. EIP-712 Sign</div>
                     </div>
                     <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 4 ? 'bg-neutral-800/80 border-emerald-500/60 text-emerald-400' : 'bg-neutral-900/40 border-neutral-800 text-neutral-600'
+                      step >= 4 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
                     }`}>
-                      <div className="text-[10px] font-mono font-bold">STEP 4</div>
-                      <div className="text-xs font-medium truncate">4. 200 Payload</div>
+                      <div className="text-[10px] font-mono">STEP 4</div>
+                      <div className="text-xs truncate mt-0.5">4. 200 Payload</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Console Tabs */}
-                <div className="flex items-center justify-between pb-3 mb-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-neutral-800/80">
+                  <div className="flex items-center gap-2" role="tablist" aria-label="Playground output format tabs">
                     <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'console'}
                       onClick={() => setActiveTab('console')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors ${
-                        activeTab === 'console' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-400 hover:text-neutral-200'
+                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        activeTab === 'console' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
                       Console Output
                     </button>
                     <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'curl'}
                       onClick={() => setActiveTab('curl')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors ${
-                        activeTab === 'curl' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-400 hover:text-neutral-200'
+                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        activeTab === 'curl' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
                       cURL
                     </button>
                     <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'python'}
                       onClick={() => setActiveTab('python')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors ${
-                        activeTab === 'python' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-400 hover:text-neutral-200'
+                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        activeTab === 'python' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
                       Python
                     </button>
                     <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'ts'}
                       onClick={() => setActiveTab('ts')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors ${
-                        activeTab === 'ts' ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-400 hover:text-neutral-200'
+                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        activeTab === 'ts' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
                       TypeScript
@@ -420,13 +432,14 @@ console.log(data);`;
 
                   {activeTab !== 'console' && (
                     <button
+                      type="button"
                       onClick={() => {
                         const code = activeTab === 'curl' ? getCurlSnippet() : activeTab === 'python' ? getPythonSnippet() : getTsSnippet();
                         copyCode(code);
                       }}
-                      className="text-xs font-mono text-neutral-400 hover:text-neutral-200 flex items-center gap-1 transition-colors"
+                      className="text-xs font-mono text-neutral-300 hover:text-white flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800"
                     >
-                      {copiedCode ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3" />}
+                      {copiedCode ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3 text-neutral-400" />}
                       <span>{copiedCode ? 'Copied' : 'Copy'}</span>
                     </button>
                   )}
@@ -436,29 +449,31 @@ console.log(data);`;
                 {activeTab === 'console' && (
                   <div className="rounded-xl bg-black/80 text-neutral-300 p-4 font-mono text-xs border border-neutral-800/80 overflow-x-auto min-h-[300px] max-h-[460px] overflow-y-auto leading-relaxed">
                     {step === 1 && !executing && !responseData && (
-                      <div className="text-neutral-600 py-16 text-center">
-                        Click <strong className="text-neutral-400">"Execute via x402"</strong> to launch simulation.
+                      <div className="text-neutral-500 py-16 text-center font-sans">
+                        Click <strong className="text-neutral-200 font-mono">"Execute via x402"</strong> to launch simulation.
                       </div>
                     )}
 
                     {challenge402 && (
-                      <div className="mb-4 pb-4 border-b border-neutral-800">
-                        <div className="text-amber-400 font-semibold mb-1">
-                          HTTP/1.1 402 Payment Required
+                      <div className="mb-4 pb-4 border-b border-neutral-800/80">
+                        <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
+                          <span className="size-1.5 rounded-full bg-blue-500" />
+                          <span>HTTP/1.1 402 Payment Required</span>
                         </div>
-                        <div className="text-neutral-400 text-[11px] mb-2">
+                        <div className="text-neutral-400 text-[11px] mb-2 font-mono">
                           Receiver: {challenge402.paymentRequirements.payTo} • Token: Base USDC ({challenge402.paymentRequirements.tokenAddress})
                         </div>
-                        <pre className="text-amber-300/80 text-[11px]">
+                        <pre className="text-neutral-300 text-[11px] bg-black/50 p-3 rounded-lg border border-neutral-800">
                           {JSON.stringify(challenge402, null, 2)}
                         </pre>
                       </div>
                     )}
 
                     {verificationResult && (
-                      <div className="mb-4 pb-4 border-b border-neutral-800">
-                        <div className="text-purple-400 font-semibold mb-1">
-                          EIP-712 ERC-3009 Verification
+                      <div className="mb-4 pb-4 border-b border-neutral-800/80">
+                        <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
+                          <span className="size-1.5 rounded-full bg-blue-500" />
+                          <span>Cryptographic Proof Verification</span>
                         </div>
                         <div className="text-neutral-300 text-[11px]">
                           Status: <span className="text-emerald-400 font-semibold">VALID_SIGNATURE</span>

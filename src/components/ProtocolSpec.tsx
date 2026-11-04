@@ -18,32 +18,32 @@ export const ProtocolSpec: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5 mb-12">
           <div className="bg-surface border border-surface-border p-4 rounded-lg">
             <div className="text-xs font-mono text-ink-muted mb-2">01</div>
-            <h3 className="font-mono font-medium text-ink-primary text-xs mb-1.5">Request capability</h3>
-            <p className="text-xs text-ink-secondary leading-relaxed font-mono">
+            <h3 className="font-sans font-medium text-ink-primary text-sm mb-1.5">Request capability</h3>
+            <p className="text-xs text-ink-secondary leading-relaxed font-sans">
               Agent sends standard HTTP POST to any Relay endpoint without credentials or keys.
             </p>
           </div>
 
           <div className="bg-surface border border-surface-border p-4 rounded-lg">
             <div className="text-xs font-mono text-ink-muted mb-2">02</div>
-            <h3 className="font-mono font-medium text-ink-primary text-xs mb-1.5">402 challenge</h3>
-            <p className="text-xs text-ink-secondary leading-relaxed font-mono">
+            <h3 className="font-sans font-medium text-ink-primary text-sm mb-1.5">402 challenge</h3>
+            <p className="text-xs text-ink-secondary leading-relaxed font-sans">
               Gateway responds with HTTP 402 + payment metadata: USDC price, receiver address, Base chain ID, and nonce.
             </p>
           </div>
 
           <div className="bg-surface border border-surface-border p-4 rounded-lg">
             <div className="text-xs font-mono text-ink-muted mb-2">03</div>
-            <h3 className="font-mono font-medium text-ink-primary text-xs mb-1.5">Sign authorization</h3>
-            <p className="text-xs text-ink-secondary leading-relaxed font-mono">
+            <h3 className="font-sans font-medium text-ink-primary text-sm mb-1.5">Sign authorization</h3>
+            <p className="text-xs text-ink-secondary leading-relaxed font-sans">
               Agent signs off-chain EIP-712 transferWithAuthorization on Base USDC with zero ETH gas required.
             </p>
           </div>
 
           <div className="bg-surface border border-surface-border p-4 rounded-lg">
             <div className="text-xs font-mono text-ink-muted mb-2">04</div>
-            <h3 className="font-mono font-medium text-ink-primary text-xs mb-1.5">Deliver payload</h3>
-            <p className="text-xs text-ink-secondary leading-relaxed font-mono">
+            <h3 className="font-sans font-medium text-ink-primary text-sm mb-1.5">Deliver payload</h3>
+            <p className="text-xs text-ink-secondary leading-relaxed font-sans">
               Gateway verifies cryptographic signature and immediately returns the verified capability payload.
             </p>
           </div>
