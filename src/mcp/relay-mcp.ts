@@ -8,6 +8,8 @@
  */
 
 import { RELAY_RESOURCES, dispatchResourceRequest, generate402Challenge, verifyPaymentProof } from '../server/x402Engine';
+import { getOrCreateAgentWallet, signChallengeWithAgentKey } from '../server/agentWallet';
+import type { Hex } from 'viem';
 
 export interface McpToolDefinition {
   name: string;
@@ -50,16 +52,15 @@ export async function executeMcpTool(toolName: string, args: Record<string, any>
   // 1. Generate x402 payment challenge
   const challenge = generate402Challenge(resource, 'base');
 
-  // 2. Automated agent settlement verification (simulated or real EIP-712 proof)
-  const payer = walletAddress || '0xAgentAutonomousWalletBase8453';
-  const proof = {
-    scheme: 'transferWithAuthorization' as const,
-    payerAddress: payer,
-    timestamp: Date.now(),
-    txHash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`
-  };
+  // 2. Automated cryptographic EIP-712 settlement
+  const configuredKey = typeof process !== 'undefined' && (process.env?.AGENT_PRIVATE_KEY || process.env?.BASE_PRIVATE_KEY);
+  const keyToUse = configuredKey && configuredKey.startsWith('0x') && configuredKey.length === 66
+    ? (configuredKey as Hex)
+    : getOrCreateAgentWallet().privateKey;
 
-  const verification = verifyPaymentProof(proof, resource);
+  const proof = await signChallengeWithAgentKey(keyToUse, challenge);
+
+  const verification = await verifyPaymentProof(proof, resource, challenge);
   if (!verification.valid) {
     return {
       isError: true,
