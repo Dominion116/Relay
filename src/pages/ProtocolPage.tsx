@@ -126,110 +126,146 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
             </div>
           </div>
 
-          {/* 4-Step Flow */}
-          <div className="mb-16 pt-8">
-            <span className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-2 block font-medium">
-              Core Handshake
-            </span>
-            <h2 className="text-2xl font-medium tracking-tight text-neutral-100 mb-8">
-              4-Step Gasless Execution Cycle
-            </h2>
+          {/* 4-Step Execution Cycle */}
+          <section className="mb-16 pt-8" aria-labelledby="protocol-cycle-heading">
+            <div className="max-w-2xl mb-8">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
+                <span className="size-1.5 rounded-full bg-neutral-500" />
+                <span>Core handshake</span>
+              </div>
+              <h2 id="protocol-cycle-heading" className="text-2xl sm:text-3xl font-medium tracking-tight text-neutral-100 mb-3">
+                4-step gasless execution cycle
+              </h2>
+              <p className="text-[15px] leading-relaxed text-neutral-400">
+                A standardized HTTP 402 handshake enabling autonomous agent micro-commerce on Base with zero human credentials.
+              </p>
+            </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 flex flex-col justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Step 1 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono text-neutral-500 font-bold mb-2 block">01 / DISCOVERY</span>
-                  <h3 className="text-base font-medium text-neutral-100 mb-2">Unauthenticated Request</h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
+                      Step 1
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Client → Gateway</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">Unauthenticated request</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
                     Client sends a regular HTTP POST. No API key, session, or pre-funding is required.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-500">
-                  <code>POST /api/v1/academic/works</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Wire invocation:</span>
+                  <code className="text-neutral-200">POST /api/v1/academic/works</code>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 flex flex-col justify-between">
+              {/* Step 2 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono text-amber-400 font-bold mb-2 block">02 / CHALLENGE</span>
-                  <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 402 Challenge</h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
+                      Step 2
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Gateway → Client</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 402 challenge</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
                     Gateway yields 402 + payment metadata: USDC price, receiver address, Base chain ID, and nonce.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-amber-400/90">
-                  <code>Status: 402 Payment Required</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Response status:</span>
+                  <code className="text-neutral-200">402 Payment Required</code>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 flex flex-col justify-between">
+              {/* Step 3 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono text-blue-400 font-bold mb-2 block">03 / SIGNATURE</span>
-                  <h3 className="text-base font-medium text-neutral-100 mb-2">Off-chain EIP-712 Sign</h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                      Step 3
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Client (Signer)</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">Off-chain EIP-712 sign</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
                     Agent signs off-chain transfer authorization. Zero ETH gas spent by the requesting agent.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-blue-400/90">
-                  <code>X-Payment-Proof: 0x...</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Header proof:</span>
+                  <code className="text-blue-400">X-Payment-Proof: 0x...</code>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 flex flex-col justify-between">
+              {/* Step 4 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono text-emerald-400 font-bold mb-2 block">04 / FULFILLMENT</span>
-                  <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 200 Payload</h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
+                      Step 4
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Gateway → Client</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 200 payload</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
                     Gateway verifies cryptographic proof and returns authoritative live data in real-time.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-emerald-400/90">
-                  <code>Status: 200 OK • Fulfilled</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Fulfilled response:</span>
+                  <code className="text-neutral-200">200 OK • Fulfilled</code>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Schemas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16 pt-8">
-            <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 md:p-8">
-              <div className="flex items-center justify-between mb-3">
+            <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 hover:border-neutral-700/80 transition-colors">
+              <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800/80">
                 <div>
-                  <span className="text-xs font-mono text-blue-400 uppercase tracking-wider font-medium block">Authorization Schema</span>
+                  <span className="text-xs font-mono text-blue-400 block mb-0.5">Authorization schema</span>
                   <h3 className="text-lg font-medium text-neutral-100">EIP-712 Typed Data (ERC-3009)</h3>
                 </div>
                 <button
+                  type="button"
                   onClick={() => copyToClipboard(eip712Schema, 'eip712')}
-                  className="text-xs font-mono text-neutral-400 hover:text-neutral-200 px-3 py-1 rounded-full border border-neutral-800 bg-neutral-900 flex items-center gap-1.5 transition-colors"
+                  className="text-xs font-mono text-neutral-300 hover:text-white px-3 py-1.5 rounded-full border border-neutral-800 bg-neutral-900/80 hover:bg-neutral-800 flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  {copiedSection === 'eip712' ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3" />}
+                  {copiedSection === 'eip712' ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3 text-neutral-400" />}
                   <span>{copiedSection === 'eip712' ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
-              <p className="text-xs text-neutral-400 mb-4 leading-relaxed font-mono">
-                Official Base USDC (<code className="text-neutral-200">0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code>) allows signing payments off-chain:
+              <p className="text-sm text-neutral-400 mb-4 leading-relaxed font-sans">
+                Official Base USDC (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs font-mono">0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code>) supports off-chain gasless transfer authorization:
               </p>
               <pre className="p-4 rounded-xl bg-black/70 text-neutral-300 font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800/80">
                 <code>{eip712Schema}</code>
               </pre>
             </div>
 
-            <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 md:p-8">
-              <div className="flex items-center justify-between mb-3">
+            <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 hover:border-neutral-700/80 transition-colors">
+              <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800/80">
                 <div>
-                  <span className="text-xs font-mono text-emerald-400 uppercase tracking-wider font-medium block">Automated Discovery</span>
+                  <span className="text-xs font-mono text-neutral-400 block mb-0.5">Automated discovery</span>
                   <h3 className="text-lg font-medium text-neutral-100">Machine Manifest (/.well-known/x402)</h3>
                 </div>
                 <button
+                  type="button"
                   onClick={() => copyToClipboard(manifestSchema, 'manifest')}
-                  className="text-xs font-mono text-neutral-400 hover:text-neutral-200 px-3 py-1 rounded-full border border-neutral-800 bg-neutral-900 flex items-center gap-1.5 transition-colors"
+                  className="text-xs font-mono text-neutral-300 hover:text-white px-3 py-1.5 rounded-full border border-neutral-800 bg-neutral-900/80 hover:bg-neutral-800 flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  {copiedSection === 'manifest' ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3" />}
+                  {copiedSection === 'manifest' ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3 text-neutral-400" />}
                   <span>{copiedSection === 'manifest' ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
-              <p className="text-xs text-neutral-400 mb-4 leading-relaxed font-mono">
-                Agents automatically query the root JSON endpoint to discover capability prices and parameters:
+              <p className="text-sm text-neutral-400 mb-4 leading-relaxed font-sans">
+                Autonomous crawlers query the well-known discovery URI to index pricing, capabilities, and parameters:
               </p>
               <pre className="p-4 rounded-xl bg-black/70 text-neutral-300 font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800/80">
                 <code>{manifestSchema}</code>
@@ -238,49 +274,52 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
           </div>
 
           {/* Comparison Matrix */}
-          <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 md:p-8 mb-16">
+          <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 mb-16">
             <div className="max-w-2xl mb-6">
-              <span className="text-xs font-mono text-neutral-500 uppercase tracking-wider font-medium block mb-1">Architecture Comparison</span>
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-3">
+                <span className="size-1.5 rounded-full bg-neutral-500" />
+                <span>Architecture comparison</span>
+              </div>
               <h2 className="text-2xl font-medium tracking-tight text-neutral-100 mb-2">Traditional Web2 APIs vs Relay (Base L2)</h2>
-              <p className="text-[14px] text-neutral-400">
+              <p className="text-sm text-neutral-400 leading-relaxed font-sans">
                 Why legacy API billing structures fail modern autonomous AI agents.
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left font-mono text-xs border-collapse">
+            <div className="overflow-x-auto rounded-xl border border-neutral-800/80">
+              <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-neutral-800 text-neutral-400">
-                    <th className="py-3 px-4 font-semibold">Dimension</th>
-                    <th className="py-3 px-4 font-semibold text-neutral-400">Traditional Web2 APIs</th>
-                    <th className="py-3 px-4 font-semibold text-blue-400">Relay (Base L2)</th>
-                    <th className="py-3 px-4 font-semibold text-emerald-400">Advantage</th>
+                  <tr className="bg-neutral-900/60 border-b border-neutral-800 text-neutral-400 font-mono">
+                    <th scope="col" className="py-3 px-4 font-semibold">Dimension</th>
+                    <th scope="col" className="py-3 px-4 font-semibold text-neutral-400">Traditional Web2 APIs</th>
+                    <th scope="col" className="py-3 px-4 font-semibold text-blue-400">Relay on Base L2</th>
+                    <th scope="col" className="py-3 px-4 font-semibold text-neutral-300">Advantage</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-800/60">
-                  <tr>
-                    <td className="py-3.5 px-4 font-medium text-neutral-200">Settlement Asset</td>
-                    <td className="py-3.5 px-4 text-neutral-500">Credit cards / monthly fiat invoicing</td>
+                <tbody className="divide-y divide-neutral-800/60 font-sans">
+                  <tr className="hover:bg-neutral-900/20 transition-colors">
+                    <td className="py-3.5 px-4 font-medium text-neutral-200 font-mono">Settlement asset</td>
+                    <td className="py-3.5 px-4 text-neutral-400">Credit cards / monthly fiat invoicing</td>
                     <td className="py-3.5 px-4 text-blue-400 font-medium">Official Native USDC on Base</td>
-                    <td className="py-3.5 px-4 text-emerald-400">Zero slippage, native USD backing</td>
+                    <td className="py-3.5 px-4 text-neutral-300">Zero slippage, native USD backing</td>
                   </tr>
-                  <tr>
-                    <td className="py-3.5 px-4 font-medium text-neutral-200">Gas & Setup</td>
-                    <td className="py-3.5 px-4 text-neutral-500">Manual dashboard KYC & billing accounts</td>
+                  <tr className="hover:bg-neutral-900/20 transition-colors">
+                    <td className="py-3.5 px-4 font-medium text-neutral-200 font-mono">Gas & setup</td>
+                    <td className="py-3.5 px-4 text-neutral-400">Manual dashboard KYC & billing accounts</td>
                     <td className="py-3.5 px-4 text-blue-400 font-medium">Zero ETH (ERC-3009 off-chain sign)</td>
-                    <td className="py-3.5 px-4 text-emerald-400">Agent holds only USDC; zero gas bootstrapping</td>
+                    <td className="py-3.5 px-4 text-neutral-300">Agent holds only USDC; zero gas bootstrapping</td>
                   </tr>
-                  <tr>
-                    <td className="py-3.5 px-4 font-medium text-neutral-200">Tooling Ecosystem</td>
-                    <td className="py-3.5 px-4 text-neutral-500">Proprietary vendor SDKs & static tokens</td>
+                  <tr className="hover:bg-neutral-900/20 transition-colors">
+                    <td className="py-3.5 px-4 font-medium text-neutral-200 font-mono">Tooling ecosystem</td>
+                    <td className="py-3.5 px-4 text-neutral-400">Proprietary vendor SDKs & static tokens</td>
                     <td className="py-3.5 px-4 text-blue-400 font-medium">Coinbase AgentKit, viem, ethers, CDP</td>
-                    <td className="py-3.5 px-4 text-emerald-400">Standard web3 and agent framework stack</td>
+                    <td className="py-3.5 px-4 text-neutral-300">Standard web3 and agent framework stack</td>
                   </tr>
-                  <tr>
-                    <td className="py-3.5 px-4 font-medium text-neutral-200">Machine Interface</td>
-                    <td className="py-3.5 px-4 text-neutral-500">Web dashboard only</td>
+                  <tr className="hover:bg-neutral-900/20 transition-colors">
+                    <td className="py-3.5 px-4 font-medium text-neutral-200 font-mono">Machine interface</td>
+                    <td className="py-3.5 px-4 text-neutral-400">Web dashboard only</td>
                     <td className="py-3.5 px-4 text-blue-400 font-medium">JSON Manifest + Model Context Protocol</td>
-                    <td className="py-3.5 px-4 text-emerald-400">Immediate plug-and-play in Cursor & Claude</td>
+                    <td className="py-3.5 px-4 text-neutral-300">Immediate plug-and-play in Cursor & Claude</td>
                   </tr>
                 </tbody>
               </table>
