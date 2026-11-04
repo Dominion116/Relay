@@ -11,6 +11,7 @@ import {
   Terminal
 } from 'lucide-react';
 import { RELAY_RESOURCES, generate402Challenge, verifyPaymentProof, dispatchResourceRequest } from '../server/x402Engine';
+import { getOrCreateAgentWallet, signChallengeWithAgentKey } from '../server/agentWallet';
 import { X402Challenge, X402VerificationResult } from '../types/x402';
 
 interface PlaygroundProps {
@@ -79,14 +80,10 @@ export const Playground: React.FC<PlaygroundProps> = ({ network, agentBalance, o
         throw new Error("Invalid JSON in request body");
       }
 
-      const proof = {
-        scheme: 'transferWithAuthorization' as const,
-        payerAddress: '0x1234567890abcdef1234567890abcdef12345678',
-        timestamp: Date.now(),
-        txHash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`
-      };
+      const wallet = getOrCreateAgentWallet();
+      const proof = await signChallengeWithAgentKey(wallet.privateKey, challenge);
 
-      const verification = verifyPaymentProof(proof, selectedResource);
+      const verification = await verifyPaymentProof(proof, selectedResource, challenge);
       setVerificationResult(verification);
       onDeductBalance(selectedResource.priceUsdc);
 

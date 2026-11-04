@@ -49,9 +49,9 @@ export interface X402PaymentProof {
     validAfter: number;
     validBefore: number;
     nonce: string;
-    v: number;
-    r: string;
-    s: string;
+    v?: number;
+    r?: string;
+    s?: string;
   };
   clientSignature?: string;
   payerAddress: string;

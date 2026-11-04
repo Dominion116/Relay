@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/.well-known/x402", "destination": "/api/well-known/x402" },
+    { "source": "/.well-known/x402.json", "destination": "/api/well-known/x402" },
+    { "source": "/v1/(.*)", "destination": "/api/v1/$1" },
+    { "source": "/api/v1/(.*)", "destination": "/api/v1/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

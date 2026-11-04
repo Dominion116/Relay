@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
 import { RELAY_RESOURCES, generate402Challenge, verifyPaymentProof, dispatchResourceRequest } from '../server/x402Engine';
 import { X402Challenge, X402VerificationResult, X402PaymentProof } from '../types/x402';
+import {
+  getOrCreateAgentWallet,
+  resetAgentWallet,
+  signChallengeWithAgentKey,
+  signChallengeWithInjectedWallet,
+  type AgentWalletSession
+} from '../server/agentWallet';
 import { FaPlay, FaCopy, FaCheck, FaRotateLeft } from 'react-icons/fa6';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface PlaygroundPageProps {
@@ -45,6 +52,16 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   const [activeTab, setActiveTab] = useState<'console' | 'curl' | 'python' | 'ts'>('console');
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
+  // Live Agent Wallet & Signing State
+  const [agentWallet, setAgentWallet] = useState<AgentWalletSession>(() => getOrCreateAgentWallet());
+  const [signingMode, setSigningMode] = useState<'agent' | 'browser'>('agent');
+  const [hasInjectedWallet, setHasInjectedWallet] = useState<boolean>(false);
+  const [activeProof, setActiveProof] = useState<X402PaymentProof | null>(null);
+
+  useEffect(() => {
+    setHasInjectedWallet(typeof window !== 'undefined' && Boolean((window as any).ethereum));
+  }, []);
+
   // Execution state
   const [executing, setExecuting] = useState<boolean>(false);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -64,6 +81,7 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
     }
     setStep(1);
     setChallenge402(null);
+    setActiveProof(null);
     setVerificationResult(null);
     setResponseData(null);
     setErrorMsg(null);
@@ -96,27 +114,25 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
       setChallenge402(challenge);
       setStep(2);
 
-      // Step 2 -> Step 3: Simulate EIP-712 client signature
-      await new Promise(r => setTimeout(r, 550));
+      // Step 2 -> Step 3: Sign authentic EIP-712 transfer authorization
+      await new Promise(r => setTimeout(r, 450));
       setStep(3);
 
-      const fakeProof = `0x${Array.from({ length: 65 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-      const payerAddress = '0x1234567890abcdef1234567890abcdef12345678';
-
-      const proofObj: X402PaymentProof = {
-        scheme: 'transferWithAuthorization',
-        payerAddress,
-        clientSignature: fakeProof,
-        timestamp: Date.now()
-      };
+      let proofObj: X402PaymentProof;
+      if (signingMode === 'browser' && typeof window !== 'undefined' && (window as any).ethereum) {
+        proofObj = await signChallengeWithInjectedWallet((window as any).ethereum, challenge);
+      } else {
+        proofObj = await signChallengeWithAgentKey(agentWallet.privateKey, challenge);
+      }
+      setActiveProof(proofObj);
 
       // Step 3 -> Step 4: Verification and Live Data Dispatch
-      await new Promise(r => setTimeout(r, 450));
-      const verification = verifyPaymentProof(proofObj, selectedResource);
+      await new Promise(r => setTimeout(r, 400));
+      const verification = await verifyPaymentProof(proofObj, selectedResource, challenge);
       setVerificationResult(verification);
 
       if (!verification.valid) {
-        throw new Error(verification.error || 'Cryptographic signature verification failed.');
+        throw new Error(verification.error || 'Cryptographic EIP-712 signature verification failed.');
       }
 
       onDeductBalance(cost);
@@ -139,16 +155,16 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   };
 
   const getCurlSnippet = () => {
-    return `# Step 1: Request (receives 402 Challenge)
+    return `# Step 1: Unauthenticated request (receives HTTP 402 Challenge)
 curl -X POST https://relay.base.org${selectedResource.path} \\
   -H "Content-Type: application/json" \\
   -d '${requestBodyText.replace(/\n/g, ' ')}'
 
-# Step 2: Sign EIP-712 authorization & re-send with proof header
+# Step 2: Re-send with authentic EIP-712 Gasless signature proof
 curl -X POST https://relay.base.org${selectedResource.path} \\
   -H "Content-Type: application/json" \\
-  -H "X-Payment-Proof: 0x<EIP712_SIGNATURE>" \\
-  -H "X-Payer-Address: 0x<YOUR_BASE_WALLET>" \\
+  -H "X-Payment-Proof: ${activeProof?.clientSignature || '0x<EIP712_SIGNATURE>'}" \\
+  -H "X-Payer-Address: ${agentWallet.address}" \\
   -d '${requestBodyText.replace(/\n/g, ' ')}'`;
   };
 
@@ -156,24 +172,26 @@ curl -X POST https://relay.base.org${selectedResource.path} \\
     return `import requests
 from eth_account import Account
 
-# 1. Unauthenticated POST
+# 1. Unauthenticated request to Relay gateway
 url = "https://relay.base.org${selectedResource.path}"
 payload = ${requestBodyText}
 res = requests.post(url, json=payload)
 
 if res.status_code == 402:
     challenge = res.json()
-    # 2. Sign EIP-712 transfer authorization for Base USDC
-    account = Account.from_key("0x<PRIVATE_KEY>")
-    # Sign typed data using challenge["paymentRequirements"]
+    req = challenge["paymentRequirements"]
     
-    # 3. Deliver proof
+    # 2. Sign EIP-712 TransferWithAuthorization for Base USDC
+    account = Account.from_key("${agentWallet.privateKey}")
+    # Sign typed data using domain and req parameters
+    
+    # 3. Deliver proof header and receive live data
     headers = {
-        "X-Payment-Proof": "0x...",
-        "X-Payer-Address": account.address
+        "X-Payment-Proof": "${activeProof?.clientSignature || '0x...'}",
+        "X-Payer-Address": "${agentWallet.address}"
     }
     data = requests.post(url, json=payload, headers=headers).json()
-    print("Authoritative response:", data)`;
+    print("Live Data:", data)`;
   };
 
   const getTsSnippet = () => {
@@ -181,7 +199,7 @@ if res.status_code == 402:
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 
-const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY as \`0x\${string}\`);
+const account = privateKeyToAccount('${agentWallet.privateKey}');
 const wallet = createWalletClient({ account, chain: base, transport: http() });
 
 // 1. Initial Request
@@ -191,7 +209,7 @@ let res = await fetch('https://relay.base.org${selectedResource.path}', {
   body: JSON.stringify(${requestBodyText})
 });
 
-// 2. Handle HTTP 402 Challenge
+// 2. Handle HTTP 402 Challenge with EIP-712 sign
 if (res.status === 402) {
   const challenge = await res.json();
   const signature = await wallet.signTypedData({
@@ -217,7 +235,7 @@ if (res.status === 402) {
     }
   });
 
-  // 3. Fulfill Capability
+  // 3. Fulfill with X-Payment-Proof
   res = await fetch('https://relay.base.org${selectedResource.path}', {
     method: 'POST',
     headers: {
@@ -235,7 +253,7 @@ console.log(data);`;
 
   return (
     <div className="w-full bg-[#0a0a0a] text-neutral-400 font-sans antialiased min-h-screen flex flex-col justify-between">
-      {/* HeaderNav with unified dark dashed styling */}
+      {/* HeaderNav */}
       <HeaderNav
         currentPage="playground"
         onNavigate={onNavigate}
@@ -252,14 +270,15 @@ console.log(data);`;
           
           {/* Page Title */}
           <div className="max-w-3xl mb-10">
-            <span className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-2 block font-medium">
-              Simulation & Inspector
-            </span>
-            <h1 className="text-3xl sm:text-4xl font-medium tracking-tight text-neutral-100 mb-4">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
+              <span className="size-1.5 rounded-full bg-blue-500" />
+              <span>Live Simulation & Inspector</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
               Simulate x402 payments on Base
             </h1>
             <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
-              Send raw requests to any endpoint. Watch the gateway return HTTP 402 Payment Required, sign the EIP-712 transfer authorization, and receive the live verified payload.
+              Send raw requests to any endpoint. Watch the gateway return HTTP 402 Payment Required, sign the authentic EIP-712 transfer authorization, and receive the live verified payload.
             </p>
           </div>
 
@@ -267,8 +286,56 @@ console.log(data);`;
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
             
             {/* Left Column: Config & Request Form (5 cols) */}
-            <div className="lg:col-span-5 rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 md:p-7 flex flex-col justify-between">
+            <div className="lg:col-span-5 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-7 flex flex-col justify-between">
               <div>
+                {/* Agent Key / Signer Identity Card */}
+                <div className="rounded-xl bg-neutral-950/80 p-4 border border-neutral-800/80 mb-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono text-neutral-400 font-medium">Signing Identity</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newWallet = resetAgentWallet();
+                        setAgentWallet(newWallet);
+                      }}
+                      title="Generate new ephemeral agent private key"
+                      className="text-[11px] font-mono text-neutral-400 hover:text-white transition-colors flex items-center gap-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                    >
+                      <RotateCcw className="size-3 text-neutral-400" />
+                      <span>Rotate Key</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-mono text-xs text-neutral-200">
+                      <code>{agentWallet.address.slice(0, 10)}...{agentWallet.address.slice(-8)}</code>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                      Base EIP-712 Signer
+                    </span>
+                  </div>
+                  {hasInjectedWallet && (
+                    <div className="mt-3 pt-2.5 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono">
+                      <span className="text-neutral-500">Signing Mode:</span>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSigningMode('agent')}
+                          className={`px-2 py-0.5 rounded text-[11px] ${signingMode === 'agent' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}
+                        >
+                          Agent Key
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSigningMode('browser')}
+                          className={`px-2 py-0.5 rounded text-[11px] ${signingMode === 'browser' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}
+                        >
+                          Browser Wallet
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Endpoint Selector */}
                 <div className="mb-5">
                   <label className="block text-xs font-mono font-medium text-neutral-400 uppercase tracking-wider mb-2">
@@ -277,7 +344,7 @@ console.log(data);`;
                   <select
                     value={selectedResourceId}
                     onChange={(e) => handleSelectResource(e.target.value)}
-                    className="w-full bg-neutral-900 text-neutral-200 border border-neutral-700/80 rounded-xl px-4 py-2.5 text-xs font-mono outline-none focus:border-neutral-500"
+                    className="w-full bg-neutral-900 text-neutral-200 border border-neutral-700/80 rounded-xl px-4 py-2.5 text-xs font-mono outline-none focus:border-neutral-500 focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
                     {RELAY_RESOURCES.map((r) => (
                       <option key={r.id} value={r.id}>
@@ -298,7 +365,7 @@ console.log(data);`;
                   <div className="font-mono text-xs text-neutral-200 font-semibold break-all">
                     POST {selectedResource.path}
                   </div>
-                  <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
+                  <p className="text-xs text-neutral-400 mt-2 leading-relaxed font-sans">
                     {selectedResource.description}
                   </p>
                 </div>
@@ -310,6 +377,7 @@ console.log(data);`;
                       Request Parameters (JSON)
                     </label>
                     <button
+                      type="button"
                       onClick={() => setRequestBodyText(JSON.stringify(selectedResource.defaultParams, null, 2))}
                       className="text-[11px] font-mono text-neutral-500 hover:text-neutral-300 flex items-center gap-1 transition-colors"
                     >
@@ -321,7 +389,7 @@ console.log(data);`;
                     value={requestBodyText}
                     onChange={(e) => setRequestBodyText(e.target.value)}
                     rows={8}
-                    className="w-full rounded-xl bg-black/60 text-neutral-200 p-4 font-mono text-xs outline-none border border-neutral-800 focus:border-neutral-700 resize-none leading-relaxed"
+                    className="w-full rounded-xl bg-black/60 text-neutral-200 p-4 font-mono text-xs outline-none border border-neutral-800 focus:border-neutral-700 resize-none leading-relaxed focus-visible:ring-2 focus-visible:ring-blue-500"
                   />
                 </div>
 
@@ -335,18 +403,19 @@ console.log(data);`;
 
               {/* Execute Button */}
               <motion.button
+                type="button"
                 onClick={handleExecute}
                 disabled={executing}
                 whileTap={{ scale: 0.98 }}
-                className="w-full min-h-11 rounded-full bg-neutral-100 text-neutral-950 font-medium text-sm flex items-center justify-center gap-2 hover:bg-white disabled:opacity-50 transition-colors shadow-sm"
+                className="w-full min-h-11 rounded-full bg-neutral-100 text-neutral-950 font-medium text-sm flex items-center justify-center gap-2 hover:bg-white disabled:opacity-50 transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
               >
                 <FaPlay className="size-2.5" />
-                <span>{executing ? 'Executing Handshake...' : `Execute via x402 ($${selectedResource.priceUsdc.toFixed(2)} USDC)`}</span>
+                <span>{executing ? 'Negotiating x402 Handshake...' : `Execute via x402 ($${selectedResource.priceUsdc.toFixed(2)} USDC)`}</span>
               </motion.button>
             </div>
 
             {/* Right Column: Handshake State & Console (7 cols) */}
-            <div className="lg:col-span-7 rounded-2xl bg-neutral-900/30 border border-neutral-800 p-6 md:p-7 flex flex-col justify-between">
+            <div className="lg:col-span-7 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-7 flex flex-col justify-between">
               <div>
                 {/* 4-Step Handshake Progress Indicators */}
                 <div className="mb-6">
@@ -469,26 +538,46 @@ console.log(data);`;
                       </div>
                     )}
 
-                    {verificationResult && (
+                    {activeProof && (
                       <div className="mb-4 pb-4 border-b border-neutral-800/80">
                         <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
                           <span className="size-1.5 rounded-full bg-blue-500" />
-                          <span>Cryptographic Proof Verification</span>
+                          <span>Authentic EIP-712 ERC-3009 TransferWithAuthorization</span>
                         </div>
-                        <div className="text-neutral-300 text-[11px]">
-                          Status: <span className="text-emerald-400 font-semibold">VALID_SIGNATURE</span>
-                          <br />
-                          Payer: {verificationResult.payer}
+                        <div className="text-neutral-400 text-[11px] mb-2 font-mono">
+                          Payer Signer: {activeProof.payerAddress}
+                        </div>
+                        <pre className="text-blue-300/90 text-[11px] bg-black/50 p-3 rounded-lg border border-neutral-800 break-all whitespace-pre-wrap">
+                          {JSON.stringify({
+                            payer: activeProof.payerAddress,
+                            clientSignature: activeProof.clientSignature,
+                            authorization: activeProof.authorization
+                          }, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+
+                    {verificationResult && (
+                      <div className="mb-4 pb-4 border-b border-neutral-800/80">
+                        <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
+                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <span>Cryptographic Signature Verification Passed</span>
+                        </div>
+                        <div className="text-neutral-300 text-[11px] space-y-1">
+                          <div>Status: <span className="text-emerald-400 font-semibold">VALID_RECOVERED_SIGNATURE</span></div>
+                          <div>Verified Signer: <code className="text-neutral-200">{verificationResult.payer}</code></div>
+                          <div>Settlement Tx: <code className="text-neutral-400">{verificationResult.txHash}</code></div>
                         </div>
                       </div>
                     )}
 
                     {responseData && (
                       <div>
-                        <div className="text-emerald-400 font-semibold mb-1">
-                          HTTP/1.1 200 OK • Payload Fulfilled ({executionTimeMs}ms)
+                        <div className="text-emerald-400 font-semibold mb-1 flex items-center gap-2">
+                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <span>HTTP/1.1 200 OK • Live Payload ({executionTimeMs}ms)</span>
                         </div>
-                        <pre className="text-neutral-300 text-[11px]">
+                        <pre className="text-neutral-200 text-[11px] bg-black/50 p-3 rounded-lg border border-neutral-800">
                           {JSON.stringify(responseData, null, 2)}
                         </pre>
                       </div>
@@ -516,7 +605,7 @@ console.log(data);`;
               </div>
 
               {/* Status bar */}
-              <div className="mt-5 pt-3 flex items-center justify-between text-xs font-mono text-neutral-500">
+              <div className="mt-5 pt-3 flex items-center justify-between text-xs font-mono text-neutral-500 border-t border-neutral-800/60">
                 <span className="flex items-center gap-1.5">
                   <span className="size-2 rounded-full bg-blue-500" />
                   Network: {network === 'base' ? 'Base Mainnet (8453)' : 'Base Sepolia (84532)'}
