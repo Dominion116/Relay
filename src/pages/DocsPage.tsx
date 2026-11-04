@@ -386,22 +386,34 @@ export const DocsPage: React.FC<DocsPageProps> = ({
                 <p className="text-[14px] text-neutral-400">
                   The client and gateway interact through a standard four step flow:
                 </p>
-                <div className="space-y-3 font-mono text-xs">
+                <div className="space-y-3 text-xs">
                   <div className="p-4 rounded-xl bg-neutral-900/30 border border-neutral-800/80">
-                    <div className="text-neutral-500 font-bold mb-1">Step 1: Request</div>
-                    <div className="text-neutral-200">POST /api/v1/academic/works with parameters</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono text-[11px] font-semibold">Step 1</span>
+                      <span className="text-neutral-200 font-medium font-sans">Initial request</span>
+                    </div>
+                    <div className="text-neutral-400 font-mono text-[11px] mt-1.5">POST /api/v1/academic/works with parameters</div>
                   </div>
                   <div className="p-4 rounded-xl bg-neutral-900/30 border border-neutral-800/80">
-                    <div className="text-amber-400 font-bold mb-1">Step 2: Challenge</div>
-                    <div className="text-neutral-200">Status 402 Payment Required with price, token address, and nonce</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono text-[11px] font-semibold">Step 2</span>
+                      <span className="text-neutral-200 font-medium font-sans">HTTP 402 payment challenge</span>
+                    </div>
+                    <div className="text-neutral-400 font-mono text-[11px] mt-1.5">Status 402 Payment Required with price, token address, and nonce</div>
                   </div>
                   <div className="p-4 rounded-xl bg-neutral-900/30 border border-neutral-800/80">
-                    <div className="text-blue-400 font-bold mb-1">Step 3: Signature</div>
-                    <div className="text-neutral-200">Client signs EIP-712 transfer authorization using local private key</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono text-[11px] font-semibold">Step 3</span>
+                      <span className="text-neutral-200 font-medium font-sans">EIP-712 off-chain signature</span>
+                    </div>
+                    <div className="text-neutral-400 font-mono text-[11px] mt-1.5">Client signs gasless transfer authorization using local private key</div>
                   </div>
                   <div className="p-4 rounded-xl bg-neutral-900/30 border border-neutral-800/80">
-                    <div className="text-emerald-400 font-bold mb-1">Step 4: Fulfillment</div>
-                    <div className="text-neutral-200">Gateway validates signature and returns status 200 with payload</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono text-[11px] font-semibold">Step 4</span>
+                      <span className="text-neutral-200 font-medium font-sans">HTTP 200 payload delivery</span>
+                    </div>
+                    <div className="text-neutral-400 font-mono text-[11px] mt-1.5">Gateway validates signature and returns authoritative payload in real time</div>
                   </div>
                 </div>
               </section>

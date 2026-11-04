@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Hero9, defaultBackground } from '../components/Hero9';
-import { FaArrowRight, FaCheck } from 'react-icons/fa6';
-import { ChevronDown } from 'lucide-react';
+import { Hero9 } from '../components/Hero9';
+import { Check, ChevronDown, ArrowRight, Minus } from 'lucide-react';
 import { Footer } from '../components/Footer';
 
 interface HomePageProps {
@@ -64,7 +63,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="w-full bg-[#0a0a0a] text-neutral-400 font-sans antialiased min-h-screen flex flex-col">
-      {/* Hero Section: Hero9 Template (Left as it is per user instruction) */}
+      {/* Hero Section: Hero9 Template */}
       <Hero9
         logoText="Relay"
         title={'Programmatic Data & Capabilities\nfor AI Agents on Base'}
@@ -81,238 +80,325 @@ export const HomePage: React.FC<HomePageProps> = ({
         }}
       />
 
-      {/* Rest of the landing page sections without visible divider lines */}
-      <section className="w-full bg-[#0a0a0a]">
+      {/* Main Content Sections */}
+      <main className="w-full bg-[#0a0a0a]">
         <div className="max-w-[1400px] w-full mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-28 flex flex-col gap-24">
           
-          {/* Section 1: Traditional Web2 APIs vs Relay Architecture */}
-          <div>
+          {/* Section 1: Autonomous Commerce Shift */}
+          <section aria-labelledby="shift-heading">
             <div className="max-w-2xl mb-12">
-              <span className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-2 block font-medium">
-                Autonomous Commerce Shift
-              </span>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
+                <span className="size-1.5 rounded-full bg-blue-500" />
+                <span>Autonomous commerce shift</span>
+              </div>
+              <h2 id="shift-heading" className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
                 Why traditional API subscriptions fail AI agents
               </h2>
               <p className="text-[15px] leading-relaxed text-neutral-400">
-                Legacy Web2 APIs force autonomous agents to manage human credit cards, monthly subscription commitments, and static API keys. Relay provides pay-per-request programmatic capabilities settled natively in micro-USDC on Base.
+                Legacy Web2 APIs force autonomous agents to manage human credit cards, monthly recurring commitments, and static developer keys. Relay provides pay-per-request programmatic capabilities settled natively in micro-USDC on Base.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Previous Generation: Traditional Web2 APIs */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/60 p-7 md:p-8 flex flex-col justify-between">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+              {/* Legacy Model */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-mono text-neutral-500 uppercase tracking-wider">Legacy Model</span>
-                    <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-neutral-800 text-neutral-400">Web2 APIs</span>
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-800/80">
+                    <div>
+                      <span className="text-xs font-mono text-neutral-500 block mb-1">Architecture</span>
+                      <h3 className="text-lg font-medium text-neutral-100">Traditional SaaS APIs</h3>
+                    </div>
+                    <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-neutral-800/80 text-neutral-400 border border-neutral-700/60">
+                      Legacy model
+                    </span>
                   </div>
-                  <h3 className="text-lg font-medium text-neutral-100 mb-3">Traditional SaaS APIs</h3>
-                  <ul className="space-y-3 text-[14px] font-mono text-neutral-400">
-                    <li className="flex items-start gap-2.5">
-                      <span className="text-neutral-500 font-bold">•</span>
-                      <span>Requires human credit card billing cycles and monthly tiers</span>
+
+                  <ul className="space-y-4 text-sm text-neutral-300">
+                    <li className="flex items-start gap-3">
+                      <div className="mt-0.5 size-5 rounded-full bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center shrink-0 text-neutral-400">
+                        <Minus className="size-3 text-neutral-400" />
+                      </div>
+                      <div>
+                        <strong className="font-medium text-neutral-200">Human billing commitments:</strong> Requires credit card invoicing, monthly plan tiers, and manual spend ceilings.
+                      </div>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <span className="text-neutral-500 font-bold">•</span>
-                      <span>Requires manual dashboard signups and static developer API keys</span>
+                    <li className="flex items-start gap-3">
+                      <div className="mt-0.5 size-5 rounded-full bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center shrink-0 text-neutral-400">
+                        <Minus className="size-3 text-neutral-400" />
+                      </div>
+                      <div>
+                        <strong className="font-medium text-neutral-200">Static credential lock-in:</strong> Requires manual portal signups, account verification, and leaked API key liabilities.
+                      </div>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <span className="text-neutral-500 font-bold">•</span>
-                      <span>Incompatible with autonomous on-chain agent wallets and micro-payments</span>
+                    <li className="flex items-start gap-3">
+                      <div className="mt-0.5 size-5 rounded-full bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center shrink-0 text-neutral-400">
+                        <Minus className="size-3 text-neutral-400" />
+                      </div>
+                      <div>
+                        <strong className="font-medium text-neutral-200">Agent wallet incompatibility:</strong> Incapable of streaming payments directly from autonomous on-chain smart wallets.
+                      </div>
                     </li>
                   </ul>
                 </div>
+
+                <div className="mt-8 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-500">
+                  <span>Billing: Recurring subscriptions</span>
+                  <span>Provisioning: Manual</span>
+                </div>
               </div>
 
-              {/* Current Standard: Relay on Base */}
-              <div className="rounded-2xl bg-neutral-900/60 border border-neutral-800/60 p-7 md:p-8 flex flex-col justify-between">
+              {/* Relay on Base */}
+              <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800/80 p-6 sm:p-8 flex flex-col justify-between hover:border-neutral-700/80 transition-colors relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-mono text-blue-400 uppercase tracking-wider font-medium">New Standard</span>
-                    <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Base L2</span>
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-800/80">
+                    <div>
+                      <span className="text-xs font-mono text-blue-400 block mb-1">rfc x402 on base</span>
+                      <h3 className="text-lg font-medium text-neutral-100">Relay on Base</h3>
+                    </div>
+                    <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                      Base L2 standard
+                    </span>
                   </div>
-                  <h3 className="text-lg font-medium text-neutral-100 mb-3">Relay on Base</h3>
-                  <ul className="space-y-3 text-[14px] font-mono text-neutral-300">
-                    <li className="flex items-start gap-2.5">
-                      <FaCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-1" />
-                      <span>Settled in native USD Coin (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs">0x8335...2913</code>)</span>
+
+                  <ul className="space-y-4 text-sm text-neutral-300">
+                    <li className="flex items-start gap-3">
+                      <div className="mt-0.5 size-5 rounded-full bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 text-blue-400">
+                        <Check className="size-3 text-blue-400" />
+                      </div>
+                      <div>
+                        <strong className="font-medium text-neutral-100">Native USDC microtransactions:</strong> Settled in canonical Base USD Coin (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs font-mono">0x8335...2913</code>) at exact per-call costs.
+                      </div>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <FaCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-1" />
-                      <span><strong className="text-white font-medium">Zero ETH gas needed:</strong> Off-chain EIP-712 ERC-3009 transfer authorizations</span>
+                    <li className="flex items-start gap-3">
+                      <div className="mt-0.5 size-5 rounded-full bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 text-blue-400">
+                        <Check className="size-3 text-blue-400" />
+                      </div>
+                      <div>
+                        <strong className="font-medium text-neutral-100">Zero ETH gas needed:</strong> Gasless EIP-712 transfer authorizations under ERC-3009. Agents sign off-chain; facilitator covers execution.
+                      </div>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <FaCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-1" />
-                      <span>Native integration with Coinbase AgentKit, Cursor, and Claude MCP</span>
+                    <li className="flex items-start gap-3">
+                      <div className="mt-0.5 size-5 rounded-full bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 text-blue-400">
+                        <Check className="size-3 text-blue-400" />
+                      </div>
+                      <div>
+                        <strong className="font-medium text-neutral-100">Autonomous toolchain ready:</strong> Instant plug-and-play with Coinbase AgentKit, CDP Wallets, Cursor, and Claude via native MCP.
+                      </div>
                     </li>
                   </ul>
+                </div>
+
+                <div className="mt-8 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-400">
+                  <span className="text-blue-400">Billing: Per request ($0.01 - $0.12)</span>
+                  <span className="text-neutral-300">Setup: Zero accounts</span>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Section 2: 4-Step Wire Protocol Sequence */}
-          <div>
+          {/* Section 2: Execution Cycle */}
+          <section aria-labelledby="cycle-heading">
             <div className="max-w-2xl mb-12">
-              <span className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-2 block font-medium">
-                Execution Cycle
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-medium tracking-tight text-neutral-100 mb-4">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
+                <span className="size-1.5 rounded-full bg-neutral-500" />
+                <span>Execution cycle</span>
+              </div>
+              <h2 id="cycle-heading" className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4">
                 How autonomous agents call Relay via x402
               </h2>
               <p className="text-[15px] leading-relaxed text-neutral-400">
-                A simple 4-step programmatic handshake reviving HTTP status 402 for machine-to-machine commerce.
+                A 4-step cryptographic wire handshake reviving the HTTP 402 Payment Required status code for machine-to-machine commerce on Base.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="rounded-2xl bg-neutral-900/40 border border-neutral-800/60 p-6 flex flex-col justify-between">
+              {/* Step 1 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono font-medium text-neutral-500 mb-2 block">01 / REQUEST</span>
-                  <h4 className="text-base font-medium text-neutral-100 mb-2">Unauthenticated Call</h4>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
-                    Agent sends standard HTTP POST to any Relay endpoint without API keys or credentials.
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
+                      Step 1
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Client → Gateway</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">Unauthenticated call</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Agent sends standard HTTP POST to any Relay endpoint without API keys, accounts, or session tokens.
                   </p>
                 </div>
-                <div className="mt-4 text-[11px] font-mono text-neutral-500">
-                  <code>POST /api/v1/academic/works</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Wire invocation:</span>
+                  <code className="text-neutral-200">POST /api/v1/academic/search</code>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-neutral-900/40 border border-neutral-800/60 p-6 flex flex-col justify-between">
+              {/* Step 2 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono font-medium text-amber-400 mb-2 block">02 / CHALLENGE</span>
-                  <h4 className="text-base font-medium text-neutral-100 mb-2">HTTP 402 Challenge</h4>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
-                    Gateway responds with status 402, USDC price, payee address, Base chain ID, and nonce.
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
+                      Step 2
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Gateway → Client</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 402 challenge</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Gateway responds with status 402, required micro-USDC price, payee address, Base chain ID, and fresh nonce.
                   </p>
                 </div>
-                <div className="mt-4 text-[11px] font-mono text-amber-400/90">
-                  <code>Status: 402 Payment Required</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Response status:</span>
+                  <code className="text-neutral-200">402 Payment Required</code>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-neutral-900/40 border border-neutral-800/60 p-6 flex flex-col justify-between">
+              {/* Step 3 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono font-medium text-blue-400 mb-2 block">03 / SIGNATURE</span>
-                  <h4 className="text-base font-medium text-neutral-100 mb-2">EIP-712 Authorization</h4>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
-                    Agent signs gasless off-chain transfer authorization. Zero ETH gas spent by the agent.
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                      Step 3
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Client (Signer)</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">EIP-712 authorization</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Agent signs off-chain gasless transfer authorization with local wallet. Zero ETH spent by the agent.
                   </p>
                 </div>
-                <div className="mt-4 text-[11px] font-mono text-blue-400/90">
-                  <code>X-Payment-Proof: 0x...</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Header proof:</span>
+                  <code className="text-blue-400">X-Payment-Proof: 0x...</code>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-neutral-900/40 border border-neutral-800/60 p-6 flex flex-col justify-between">
+              {/* Step 4 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
-                  <span className="text-xs font-mono font-medium text-emerald-400 mb-2 block">04 / DELIVERY</span>
-                  <h4 className="text-base font-medium text-neutral-100 mb-2">HTTP 200 Fulfilled</h4>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-mono">
-                    Gateway validates cryptographic proof and returns authoritative live payload instantly.
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
+                      Step 4
+                    </span>
+                    <span className="text-[11px] font-mono text-neutral-500">Gateway → Client</span>
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 200 fulfilled</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Gateway validates cryptographic proof on Base and delivers authoritative live data payload in sub-second time.
                   </p>
                 </div>
-                <div className="mt-4 text-[11px] font-mono text-emerald-400/90">
-                  <code>Status: 200 OK • Data Returned</code>
+                <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
+                  <span className="text-neutral-500 block mb-0.5">Fulfilled response:</span>
+                  <code className="text-neutral-200">200 OK • Payload delivered</code>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Section 3: Frequently Asked Questions */}
-          <div>
+          <section aria-labelledby="faq-heading">
             <div className="max-w-2xl mb-12">
-              <span className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-2 block font-medium">
-                Frequently Asked Questions
-              </span>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
+                <span className="size-1.5 rounded-full bg-neutral-500" />
+                <span>Frequently asked questions</span>
+              </div>
+              <h2 id="faq-heading" className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
                 Everything you need to know about Relay
               </h2>
               <p className="text-[15px] leading-relaxed text-neutral-400">
-                Common questions about x402 micropayments, zero gas settlement on Base, and autonomous agent capabilities.
+                Clear answers regarding x402 micropayments, gasless settlement on Base, and autonomous agent capabilities.
               </p>
             </div>
 
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {faqs.map((faq, index) => {
                 const isOpen = openFaq === index;
+                const questionId = `faq-q-${index}`;
+                const panelId = `faq-p-${index}`;
                 return (
                   <div
                     key={index}
-                    className="rounded-2xl bg-neutral-900/40 border border-neutral-800/60 overflow-hidden transition-colors hover:border-neutral-700/80"
+                    className={`rounded-2xl border transition-all duration-200 ${
+                      isOpen
+                        ? 'bg-neutral-900/50 border-neutral-700/80 shadow-lg shadow-black/20'
+                        : 'bg-neutral-900/30 border-neutral-800/60 hover:border-neutral-700/60'
+                    }`}
                   >
                     <button
                       type="button"
-                      onClick={() => setOpenFaq(isOpen ? null : index)}
-                      className="w-full px-6 py-5 sm:px-7 sm:py-6 text-left flex items-center justify-between gap-4 cursor-pointer"
+                      id={questionId}
                       aria-expanded={isOpen}
+                      aria-controls={panelId}
+                      onClick={() => setOpenFaq(isOpen ? null : index)}
+                      className="w-full px-6 py-5 sm:px-7 sm:py-5 text-left flex items-center justify-between gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 rounded-2xl"
                     >
-                      <span className="text-base sm:text-lg font-medium text-neutral-100 tracking-tight">
+                      <span className="text-base sm:text-[17px] font-medium text-neutral-100 tracking-tight">
                         {faq.question}
                       </span>
-                      <ChevronDown
-                        className={`size-5 text-neutral-400 shrink-0 transition-transform duration-200 ${
-                          isOpen ? 'rotate-180 text-white' : ''
-                        }`}
-                      />
+                      <div className={`size-7 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                        isOpen ? 'bg-neutral-800 border-neutral-700 text-white' : 'bg-neutral-900 border-neutral-800 text-neutral-400'
+                      }`}>
+                        <ChevronDown
+                          className={`size-4 transition-transform duration-200 ${
+                            isOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </div>
                     </button>
                     {isOpen && (
-                      <div className="px-6 pb-6 sm:px-7 sm:pb-7 pt-0 text-[14px] sm:text-[15px] text-neutral-400 leading-relaxed font-sans border-t border-neutral-800/40 mt-1">
-                        <p className="pt-3">{faq.answer}</p>
+                      <div
+                        id={panelId}
+                        role="region"
+                        aria-labelledby={questionId}
+                        className="px-6 pb-6 sm:px-7 sm:pb-6 pt-0 text-[14px] sm:text-[15px] text-neutral-400 leading-relaxed font-sans border-t border-neutral-800/60 mt-1"
+                      >
+                        <p className="pt-4">{faq.answer}</p>
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          {/* Section 4: Call to Action Banner with Hero9 Background */}
-          <div>
-            <div className="relative isolate overflow-hidden rounded-3xl bg-sky-300 p-10 sm:p-14 lg:p-16 text-center flex flex-col items-center justify-center text-slate-950 shadow-2xl">
-              <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
-                <img
-                  src={defaultBackground}
-                  alt=""
-                  className="h-full w-full object-cover object-center"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/20" />
+          {/* Section 4: Call to Action Banner (Unified Dark Theme) */}
+          <section aria-labelledby="cta-heading">
+            <div className="relative isolate overflow-hidden rounded-3xl bg-neutral-900/60 border border-neutral-800 p-8 sm:p-12 lg:p-16 text-center flex flex-col items-center justify-center">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800/80 border border-neutral-700/60 text-xs font-mono text-neutral-300 mb-4">
+                <span className="size-1.5 rounded-full bg-blue-500" />
+                <span>Interactive testbench</span>
               </div>
 
-              <span className="text-xs font-mono uppercase tracking-wider text-slate-900 mb-3 px-3.5 py-1 rounded-full bg-white/70 backdrop-blur-sm font-semibold border border-white/60">
-                Live Testbench
-              </span>
-
-              <h3 className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-[-0.03em] text-slate-950 mb-3.5 max-w-2xl text-balance">
+              <h3 id="cta-heading" className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 max-w-2xl text-balance">
                 Ready to test live x402 capability calls?
               </h3>
-              <p className="text-[15px] sm:text-[16px] text-slate-900/85 max-w-xl mx-auto mb-8 leading-relaxed">
+              <p className="text-[15px] sm:text-base text-neutral-400 max-w-xl mx-auto mb-8 leading-relaxed">
                 Execute live requests against CoinGecko, OpenAlex, Open-Meteo, and Wikidata in the interactive playground testbench.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   onClick={() => onNavigate('playground')}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-950 text-white px-6 text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm active:scale-[0.98]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white text-neutral-950 px-6 text-sm font-medium hover:bg-neutral-200 transition-colors shadow-sm active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   <span>Open interactive playground</span>
-                  <FaArrowRight className="size-3" />
+                  <ArrowRight className="size-3.5" />
                 </button>
                 <button
                   onClick={() => onNavigate('capabilities')}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-950/20 bg-white/85 text-slate-950 px-6 text-sm font-medium hover:bg-white transition-colors backdrop-blur-sm shadow-sm active:scale-[0.98]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/80 text-neutral-200 px-6 text-sm font-medium hover:bg-neutral-800 hover:border-neutral-700 transition-colors shadow-sm active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   <span>Browse 12 capabilities</span>
                 </button>
               </div>
             </div>
-          </div>
+          </section>
 
         </div>
-      </section>
+      </main>
 
-      {/* Footer20 Implementation */}
+      {/* Footer */}
       <Footer
         onNavigate={onNavigate}
         onOpenMcp={onOpenMcp}
