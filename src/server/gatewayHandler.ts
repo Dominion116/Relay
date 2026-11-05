@@ -21,7 +21,9 @@ export async function handleGatewayRequest(
   pathname: string,
   headers: Record<string, string | string[] | undefined>,
   rawBody: any,
-  origin: string = 'https://relay.base.org'
+  origin: string = (typeof process !== 'undefined' && process.env?.GATEWAY_ORIGIN) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GATEWAY_URL) ||
+    'https://relayx402.vercel.app'
 ): Promise<GatewayResponse> {
   // Normalize pathname
   const cleanPath = pathname.split('?')[0].replace(/\/+$/, '');

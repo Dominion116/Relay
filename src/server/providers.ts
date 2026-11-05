@@ -131,11 +131,98 @@ export async function fetchAcademicWork(doi: string) {
   };
 }
 
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  btc: 'BTCUSDT',
+  bitcoin: 'BTCUSDT',
+  eth: 'ETHUSDT',
+  ethereum: 'ETHUSDT',
+  sol: 'SOLUSDT',
+  solana: 'SOLUSDT',
+  bnb: 'BNBUSDT',
+  binancecoin: 'BNBUSDT',
+  base: 'AEROUSDT',
+  aero: 'AEROUSDT',
+  aerodrome: 'AEROUSDT',
+  doge: 'DOGEUSDT',
+  dogecoin: 'DOGEUSDT',
+  xrp: 'XRPUSDT',
+  ripple: 'XRPUSDT',
+  ada: 'ADAUSDT',
+  cardano: 'ADAUSDT',
+  avax: 'AVAXUSDT',
+  avalanche: 'AVAXUSDT',
+  link: 'LINKUSDT',
+  chainlink: 'LINKUSDT',
+  matic: 'POLUSDT',
+  pol: 'POLUSDT',
+  polygon: 'POLUSDT',
+  near: 'NEARUSDT',
+  arb: 'ARBUSDT',
+  arbitrum: 'ARBUSDT',
+  op: 'OPUSDT',
+  optimism: 'OPUSDT'
+};
+
+async function fetchBinanceTicker(symbol: string) {
+  const endpoints = [
+    `https://data-api.binance.vision/api/v3/ticker/24hr?symbol=${symbol}`,
+    `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // try next endpoint
+    }
+  }
+  return null;
+}
+
 /**
- * 3. Crypto Price: CoinGecko with Binance public fallback
+ * 3. Crypto Price: Binance Direct Primary (with CoinGecko Fallback)
  */
 export async function fetchCryptoPrice(assets: string[] = ['ethereum', 'bitcoin'], vsCurrency: string = 'usd') {
-  // Primary: CoinGecko
+  // Primary: Binance Live Tickers (100% Free, High Rate Limits)
+  try {
+    const prices = await Promise.all(
+      assets.map(async (asset) => {
+        const clean = asset.toLowerCase().trim();
+        const sym = BINANCE_SYMBOL_MAP[clean] || (clean.toUpperCase().endsWith('USDT') ? clean.toUpperCase() : `${clean.toUpperCase()}USDT`);
+        const bData = await fetchBinanceTicker(sym);
+        if (bData) {
+          return {
+            asset,
+            symbol: sym.replace('USDT', ''),
+            price: parseFloat(bData.lastPrice),
+            change_24h_percent: parseFloat(bData.priceChangePercent),
+            high_24h: parseFloat(bData.highPrice),
+            low_24h: parseFloat(bData.lowPrice),
+            volume_24h: parseFloat(bData.volume),
+            quote_volume_24h: parseFloat(bData.quoteVolume)
+          };
+        }
+        return null;
+      })
+    );
+
+    const validPrices = prices.filter(Boolean);
+    if (validPrices.length > 0) {
+      return {
+        quote_currency: vsCurrency.toUpperCase(),
+        prices: validPrices,
+        source: "Binance Live Market Data",
+        retrieved_at: new Date().toISOString()
+      };
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  // Secondary Fallback: CoinGecko
   try {
     const assetString = assets.join(',');
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(assetString)}&vs_currencies=${encodeURIComponent(vsCurrency)}&include_24hr_change=true`;
@@ -146,62 +233,65 @@ export async function fetchCryptoPrice(assets: string[] = ['ethereum', 'bitcoin'
         quote_currency: vsCurrency.toUpperCase(),
         prices: Object.entries(data).map(([id, info]: [string, any]) => ({
           asset: id,
+          symbol: id.toUpperCase(),
           price: info[vsCurrency.toLowerCase()],
           change_24h_percent: Number((info[`${vsCurrency.toLowerCase()}_24h_change`] || 0).toFixed(2))
         })),
-        source: "CoinGecko",
+        source: "CoinGecko (Fallback)",
         retrieved_at: new Date().toISOString()
       };
     }
   } catch {
-    // Fallback to Binance
+    // Failed
   }
 
-  // Live Fallback: Binance Public Ticker
-  const symbolMap: Record<string, string> = {
-    ethereum: 'ETHUSDT',
-    bitcoin: 'BTCUSDT',
-    solana: 'SOLUSDT',
-    base: 'AEROUSDT'
-  };
-
-  const prices = await Promise.all(
-    assets.map(async (asset) => {
-      const sym = symbolMap[asset.toLowerCase()] || `${asset.slice(0, 3).toUpperCase()}USDT`;
-      try {
-        const bRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`);
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          return {
-            asset,
-            price: parseFloat(bData.lastPrice),
-            change_24h_percent: parseFloat(bData.priceChangePercent)
-          };
-        }
-      } catch {
-        // Continue
-      }
-      return null;
-    })
-  );
-
-  const validPrices = prices.filter(Boolean);
-  if (validPrices.length === 0) {
-    throw new Error(`Unable to fetch real-time crypto prices across CoinGecko and Binance.`);
-  }
-
-  return {
-    quote_currency: vsCurrency.toUpperCase(),
-    prices: validPrices,
-    source: "Binance Public (Live Fallback)",
-    retrieved_at: new Date().toISOString()
-  };
+  throw new Error(`Unable to fetch real-time crypto prices across Binance and CoinGecko.`);
 }
 
 /**
- * 4. Crypto Market Cap & Volume: CoinGecko with Binance fallback
+ * 4. Crypto Market Cap & Volume: Binance Direct Primary (with CoinGecko Fallback)
  */
 export async function fetchCryptoMarket(assets: string[] = ['ethereum', 'bitcoin']) {
+  // Primary: Binance Live Tickers
+  try {
+    const results = await Promise.all(
+      assets.map(async (asset, idx) => {
+        const clean = asset.toLowerCase().trim();
+        const sym = BINANCE_SYMBOL_MAP[clean] || (clean.toUpperCase().endsWith('USDT') ? clean.toUpperCase() : `${clean.toUpperCase()}USDT`);
+        const d = await fetchBinanceTicker(sym);
+        if (d) {
+          const price = parseFloat(d.lastPrice);
+          const volume = parseFloat(d.quoteVolume);
+          return {
+            id: asset,
+            symbol: sym.replace('USDT', ''),
+            name: asset.toUpperCase(),
+            current_price: price,
+            change_24h_percent: parseFloat(d.priceChangePercent),
+            total_volume_24h: volume,
+            high_24h: parseFloat(d.highPrice),
+            low_24h: parseFloat(d.lowPrice),
+            market_cap_rank: idx + 1,
+            ath: parseFloat(d.highPrice)
+          };
+        }
+        return null;
+      })
+    );
+
+    const filtered = results.filter(Boolean);
+    if (filtered.length > 0) {
+      return {
+        market_data: filtered,
+        source: "Binance Live Market Data",
+        retrieved_at: new Date().toISOString()
+      };
+    }
+  } catch {
+    // Fallback
+  }
+
+  // Secondary Fallback: CoinGecko
   try {
     const assetString = assets.join(',');
     const res = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(assetString)}`, { headers: getCoinGeckoHeaders() });
@@ -220,56 +310,15 @@ export async function fetchCryptoMarket(assets: string[] = ['ethereum', 'bitcoin
           total_supply: coin.total_supply,
           ath: coin.ath
         })),
-        source: "CoinGecko",
+        source: "CoinGecko (Fallback)",
         retrieved_at: new Date().toISOString()
       };
     }
   } catch {
-    // Fallback
+    // Failed
   }
 
-  // Binance Fallback
-  const symbolMap: Record<string, string> = {
-    ethereum: 'ETHUSDT',
-    bitcoin: 'BTCUSDT',
-    solana: 'SOLUSDT'
-  };
-
-  const results = await Promise.all(
-    assets.map(async (asset, idx) => {
-      const sym = symbolMap[asset.toLowerCase()] || `${asset.slice(0, 3).toUpperCase()}USDT`;
-      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`);
-      if (res.ok) {
-        const d = await res.json();
-        const price = parseFloat(d.lastPrice);
-        const volume = parseFloat(d.quoteVolume);
-        return {
-          id: asset,
-          symbol: sym.replace('USDT', ''),
-          name: asset.toUpperCase(),
-          current_price: price,
-          market_cap: volume * 10,
-          market_cap_rank: idx + 1,
-          total_volume_24h: volume,
-          circulating_supply: null,
-          total_supply: null,
-          ath: parseFloat(d.highPrice)
-        };
-      }
-      return null;
-    })
-  );
-
-  const filtered = results.filter(Boolean);
-  if (!filtered.length) {
-    throw new Error("Unable to retrieve crypto market data from live providers.");
-  }
-
-  return {
-    market_data: filtered,
-    source: "Binance Live (Fallback)",
-    retrieved_at: new Date().toISOString()
-  };
+  throw new Error("Unable to retrieve crypto market data from live providers.");
 }
 
 /**
