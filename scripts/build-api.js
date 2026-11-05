@@ -11,7 +11,7 @@ async function buildApi() {
   await esbuild.build({
     entryPoints: {
       'well-known/x402': 'src/api-handlers/well-known-x402.ts',
-      'v1/[...route]': 'src/api-handlers/v1-route.ts'
+      'v1': 'src/api-handlers/v1-route.ts'
     },
     bundle: true,
     platform: 'node',
