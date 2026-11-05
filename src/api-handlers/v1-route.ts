@@ -13,12 +13,14 @@ export default async function handler(req: any, res: any) {
   const protocol = req.headers['x-forwarded-proto'] || 'https';
   const origin = `${protocol}://${host}`;
 
-  // Resolve route path whether called directly or via Vercel rewrite
   let cleanPath = (req.url || '').split('?')[0];
-  const queryParts = req.query?.path || req.query?.route || req.query?.match;
-  if (queryParts) {
-    const routeParts = Array.isArray(queryParts) ? queryParts.join('/') : queryParts;
-    cleanPath = `/v1/${routeParts}`;
+
+  // If rewritten to [...route] directly without path preservation in req.url
+  if (cleanPath === '/api/v1/[...route]' || cleanPath === '/v1/[...route]') {
+    const rawPath = req.headers['x-matched-path'] || req.headers['x-invoke-path'] || '';
+    if (rawPath) {
+      cleanPath = rawPath.split('?')[0];
+    }
   }
 
   const response = await handleGatewayRequest(

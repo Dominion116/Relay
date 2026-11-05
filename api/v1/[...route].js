@@ -1194,10 +1194,11 @@ async function handler(req, res) {
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const origin = `${protocol}://${host}`;
   let cleanPath = (req.url || "").split("?")[0];
-  const queryParts = req.query?.path || req.query?.route || req.query?.match;
-  if (queryParts) {
-    const routeParts = Array.isArray(queryParts) ? queryParts.join("/") : queryParts;
-    cleanPath = `/v1/${routeParts}`;
+  if (cleanPath === "/api/v1/[...route]" || cleanPath === "/v1/[...route]") {
+    const rawPath = req.headers["x-matched-path"] || req.headers["x-invoke-path"] || "";
+    if (rawPath) {
+      cleanPath = rawPath.split("?")[0];
+    }
   }
   const response = await handleGatewayRequest(
     req.method || "POST",
