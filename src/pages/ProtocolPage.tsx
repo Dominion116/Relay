@@ -6,22 +6,14 @@ import { ArrowUpRight } from 'lucide-react';
 
 interface ProtocolPageProps {
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
-  network: 'base' | 'base-sepolia';
-  setNetwork: (net: 'base' | 'base-sepolia') => void;
-  agentBalance: number;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
-  onResetBalance: () => void;
 }
 
 export const ProtocolPage: React.FC<ProtocolPageProps> = ({
   onNavigate,
-  network,
-  setNetwork,
-  agentBalance,
   onOpenMcp,
-  onOpenDiscovery,
-  onResetBalance
+  onOpenDiscovery
 }) => {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
@@ -86,12 +78,8 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
       <HeaderNav
         currentPage="protocol"
         onNavigate={onNavigate}
-        network={network}
-        setNetwork={setNetwork}
-        agentBalance={agentBalance}
         onOpenMcp={onOpenMcp}
         onOpenDiscovery={onOpenDiscovery}
-        onResetBalance={onResetBalance}
       />
 
       <main className="flex-1 w-full">

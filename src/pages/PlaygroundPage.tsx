@@ -1,41 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
-import { RELAY_RESOURCES, generate402Challenge, verifyPaymentProof, dispatchResourceRequest } from '../server/x402Engine';
+import { RELAY_RESOURCES, BASE_USDC_MAINNET, generate402Challenge, verifyPaymentProof, dispatchResourceRequest } from '../server/x402Engine';
 import { X402Challenge, X402VerificationResult, X402PaymentProof } from '../types/x402';
-import {
-  getOrCreateAgentWallet,
-  resetAgentWallet,
-  signChallengeWithAgentKey,
-  signChallengeWithInjectedWallet,
-  type AgentWalletSession
-} from '../server/agentWallet';
-import { FaPlay, FaCopy, FaCheck, FaRotateLeft } from 'react-icons/fa6';
-import { AlertCircle, RotateCcw } from 'lucide-react';
+import { EIP712_TRANSFER_TYPES } from '../server/agentWallet';
+import { FaPlay, FaCopy, FaCheck } from 'react-icons/fa6';
+import { AlertCircle, ShieldCheck, Wallet, ArrowRight, ExternalLink } from 'lucide-react';
 import { motion } from 'motion/react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount, useReadContract, useSignTypedData, useSwitchChain } from 'wagmi';
+import { base } from 'wagmi/chains';
+import { parseSignature, getAddress } from 'viem';
 
 interface PlaygroundPageProps {
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
-  network: 'base' | 'base-sepolia';
-  setNetwork: (net: 'base' | 'base-sepolia') => void;
-  agentBalance: number;
-  onDeductBalance: (amountUsdc: number) => void;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
-  onResetBalance: () => void;
   initialResourceId?: string;
   initialQuery?: string;
 }
 
+const ERC20_BALANCE_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: 'balance', type: 'uint256' }]
+  }
+] as const;
+
 export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   onNavigate,
-  network,
-  setNetwork,
-  agentBalance,
-  onDeductBalance,
   onOpenMcp,
   onOpenDiscovery,
-  onResetBalance,
   initialResourceId = 'crypto_price',
   initialQuery
 }) => {
@@ -52,20 +50,33 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   const [activeTab, setActiveTab] = useState<'console' | 'curl' | 'python' | 'ts'>('console');
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
-  // Live Agent Wallet & Signing State
-  const [agentWallet, setAgentWallet] = useState<AgentWalletSession>(() => getOrCreateAgentWallet());
-  const [signingMode, setSigningMode] = useState<'agent' | 'browser'>('agent');
-  const [hasInjectedWallet, setHasInjectedWallet] = useState<boolean>(false);
-  const [activeProof, setActiveProof] = useState<X402PaymentProof | null>(null);
+  // Wagmi & RainbowKit Web3 State
+  const { address, isConnected, chain } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const { signTypedDataAsync } = useSignTypedData();
 
-  useEffect(() => {
-    setHasInjectedWallet(typeof window !== 'undefined' && Boolean((window as any).ethereum));
-  }, []);
+  // Real on-chain Base USDC balance
+  const { data: rawUsdcBalance, isLoading: isBalanceLoading, refetch: refetchUsdc } = useReadContract({
+    address: BASE_USDC_MAINNET,
+    abi: ERC20_BALANCE_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: {
+      enabled: Boolean(address && isConnected)
+    }
+  });
+
+  const realUsdcBalance = rawUsdcBalance !== undefined
+    ? Number(rawUsdcBalance) / 1_000_000
+    : null;
+
+  const isBaseMainnet = chain?.id === base.id;
 
   // Execution state
   const [executing, setExecuting] = useState<boolean>(false);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [challenge402, setChallenge402] = useState<X402Challenge | null>(null);
+  const [activeProof, setActiveProof] = useState<X402PaymentProof | null>(null);
   const [verificationResult, setVerificationResult] = useState<X402VerificationResult | null>(null);
   const [responseData, setResponseData] = useState<any>(null);
   const [executionTimeMs, setExecutionTimeMs] = useState<number>(0);
@@ -88,6 +99,16 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   };
 
   const handleExecute = async () => {
+    if (!isConnected || !address) {
+      setErrorMsg('Wallet connection required. Please connect your Base wallet to execute this request.');
+      return;
+    }
+
+    if (!isBaseMainnet) {
+      setErrorMsg('Wrong network. Please switch to Base Mainnet (Chain ID 8453).');
+      return;
+    }
+
     let parsedParams: any = {};
     try {
       parsedParams = JSON.parse(requestBodyText);
@@ -97,8 +118,8 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
     }
 
     const cost = selectedResource.priceUsdc;
-    if (agentBalance < cost) {
-      setErrorMsg(`Insufficient agent balance ($${agentBalance.toFixed(2)} USDC). Requires $${cost.toFixed(2)} USDC.`);
+    if (realUsdcBalance !== null && realUsdcBalance < cost) {
+      setErrorMsg(`Insufficient Base USDC balance ($${realUsdcBalance.toFixed(2)} USDC). Requires $${cost.toFixed(2)} USDC.`);
       return;
     }
 
@@ -108,26 +129,66 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
     const startTime = performance.now();
 
     try {
-      // Step 1: Initial unauthenticated request -> Step 2: 402 Challenge
-      await new Promise(r => setTimeout(r, 400));
-      const challenge = generate402Challenge(selectedResource, network);
+      // Step 1: Gateway request -> Step 2: HTTP 402 Challenge on Base Mainnet
+      await new Promise(r => setTimeout(r, 300));
+      const challenge = generate402Challenge(selectedResource, 'base');
       setChallenge402(challenge);
       setStep(2);
 
-      // Step 2 -> Step 3: Sign authentic EIP-712 transfer authorization
-      await new Promise(r => setTimeout(r, 450));
+      // Step 2 -> Step 3: Real EIP-712 ERC-3009 TransferWithAuthorization Signature
+      await new Promise(r => setTimeout(r, 350));
       setStep(3);
 
-      let proofObj: X402PaymentProof;
-      if (signingMode === 'browser' && typeof window !== 'undefined' && (window as any).ethereum) {
-        proofObj = await signChallengeWithInjectedWallet((window as any).ethereum, challenge);
-      } else {
-        proofObj = await signChallengeWithAgentKey(agentWallet.privateKey, challenge);
-      }
+      const domain = {
+        name: 'USD Coin',
+        version: '2',
+        chainId: 8453,
+        verifyingContract: getAddress(challenge.paymentRequirements.tokenAddress)
+      } as const;
+
+      const rawNonce = challenge.paymentRequirements.nonce;
+      const formattedNonce = rawNonce.startsWith('0x') && rawNonce.length === 66
+        ? (rawNonce as `0x${string}`)
+        : (`0x${rawNonce.replace(/^0x/, '').padStart(64, '0')}` as `0x${string}`);
+
+      const signature = await signTypedDataAsync({
+        domain,
+        types: EIP712_TRANSFER_TYPES,
+        primaryType: 'TransferWithAuthorization',
+        message: {
+          from: getAddress(address),
+          to: getAddress(challenge.paymentRequirements.payTo),
+          value: BigInt(challenge.paymentRequirements.amount),
+          validAfter: 0n,
+          validBefore: BigInt(challenge.paymentRequirements.validBefore),
+          nonce: formattedNonce
+        }
+      });
+
+      const parsedSig = parseSignature(signature);
+
+      const proofObj: X402PaymentProof = {
+        scheme: 'transferWithAuthorization',
+        clientSignature: signature,
+        payerAddress: address,
+        timestamp: Date.now(),
+        authorization: {
+          from: address,
+          to: challenge.paymentRequirements.payTo,
+          value: challenge.paymentRequirements.amount,
+          validAfter: 0,
+          validBefore: challenge.paymentRequirements.validBefore,
+          nonce: challenge.paymentRequirements.nonce,
+          v: parsedSig.v ? Number(parsedSig.v) : undefined,
+          r: parsedSig.r,
+          s: parsedSig.s
+        }
+      };
+
       setActiveProof(proofObj);
 
-      // Step 3 -> Step 4: Verification and Live Data Dispatch
-      await new Promise(r => setTimeout(r, 400));
+      // Step 3 -> Step 4: Cryptographic Verification and Live Data Dispatch
+      await new Promise(r => setTimeout(r, 300));
       const verification = await verifyPaymentProof(proofObj, selectedResource, challenge);
       setVerificationResult(verification);
 
@@ -135,10 +196,13 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
         throw new Error(verification.error || 'Cryptographic EIP-712 signature verification failed.');
       }
 
-      onDeductBalance(cost);
+      // Fetch live data directly from provider
       const data = await dispatchResourceRequest(selectedResource.id, parsedParams);
       setResponseData(data);
       setStep(4);
+
+      // Refetch onchain balance
+      refetchUsdc?.();
     } catch (err: any) {
       setErrorMsg(err.message || 'Error executing request.');
     } finally {
@@ -155,43 +219,33 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   };
 
   const getCurlSnippet = () => {
-    return `# Step 1: Unauthenticated request (receives HTTP 402 Challenge)
-curl -X POST https://relay.base.org${selectedResource.path} \\
+    return `# Step 1: Request endpoint (receives HTTP 402 Challenge on Base)
+curl -X POST https://relayx402.vercel.app${selectedResource.path} \\
   -H "Content-Type: application/json" \\
   -d '${requestBodyText.replace(/\n/g, ' ')}'
 
-# Step 2: Re-send with authentic EIP-712 Gasless signature proof
-curl -X POST https://relay.base.org${selectedResource.path} \\
+# Step 2: Sign Base EIP-712 transfer authorization & resubmit
+curl -X POST https://relayx402.vercel.app${selectedResource.path} \\
   -H "Content-Type: application/json" \\
-  -H "X-Payment-Proof: ${activeProof?.clientSignature || '0x<EIP712_SIGNATURE>'}" \\
-  -H "X-Payer-Address: ${agentWallet.address}" \\
+  -H "Authorization: Bearer <signed_eip712_json_or_b64>" \\
   -d '${requestBodyText.replace(/\n/g, ' ')}'`;
   };
 
   const getPythonSnippet = () => {
-    return `import requests
-from eth_account import Account
+    return `import requests, json
 
-# 1. Unauthenticated request to Relay gateway
-url = "https://relay.base.org${selectedResource.path}"
+url = "https://relayx402.vercel.app${selectedResource.path}"
 payload = ${requestBodyText}
+
+# Request endpoint without payment
 res = requests.post(url, json=payload)
 
 if res.status_code == 402:
-    challenge = res.json()
-    req = challenge["paymentRequirements"]
-    
-    # 2. Sign EIP-712 TransferWithAuthorization for Base USDC
-    account = Account.from_key("${agentWallet.privateKey}")
-    # Sign typed data using domain and req parameters
-    
-    # 3. Deliver proof header and receive live data
-    headers = {
-        "X-Payment-Proof": "${activeProof?.clientSignature || '0x...'}",
-        "X-Payer-Address": "${agentWallet.address}"
-    }
-    data = requests.post(url, json=payload, headers=headers).json()
-    print("Live Data:", data)`;
+    challenge = res.json()["paymentRequirements"]
+    print(f"Payment Required: {challenge['amountFormatted']} on Base (Chain {challenge['chainId']})")
+    print(f"Payee Address: {challenge['payTo']}")
+    print(f"USDC Contract: {challenge['tokenAddress']}")
+    # Sign EIP-712 TransferWithAuthorization using local agent key and attach in Authorization header`;
   };
 
   const getTsSnippet = () => {
@@ -199,56 +253,20 @@ if res.status_code == 402:
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 
-const account = privateKeyToAccount('${agentWallet.privateKey}');
-const wallet = createWalletClient({ account, chain: base, transport: http() });
+const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY as \`0x\${string}\`);
+const client = createWalletClient({ account, chain: base, transport: http() });
 
-// 1. Initial Request
-let res = await fetch('https://relay.base.org${selectedResource.path}', {
+// Step 1: Initial call receives 402
+const res = await fetch('https://relayx402.vercel.app${selectedResource.path}', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(${requestBodyText})
+  body: JSON.stringify(${requestBodyText.replace(/\n/g, ' ')})
 });
 
-// 2. Handle HTTP 402 Challenge with EIP-712 sign
 if (res.status === 402) {
   const challenge = await res.json();
-  const signature = await wallet.signTypedData({
-    domain: { name: 'USD Coin', version: '2', chainId: 8453, verifyingContract: challenge.paymentRequirements.tokenAddress },
-    types: {
-      TransferWithAuthorization: [
-        { name: 'from', type: 'address' },
-        { name: 'to', type: 'address' },
-        { name: 'value', type: 'uint256' },
-        { name: 'validAfter', type: 'uint256' },
-        { name: 'validBefore', type: 'uint256' },
-        { name: 'nonce', type: 'bytes32' }
-      ]
-    },
-    primaryType: 'TransferWithAuthorization',
-    message: {
-      from: account.address,
-      to: challenge.paymentRequirements.payTo,
-      value: BigInt(challenge.paymentRequirements.amount),
-      validAfter: 0n,
-      validBefore: BigInt(challenge.paymentRequirements.validBefore),
-      nonce: challenge.paymentRequirements.nonce
-    }
-  });
-
-  // 3. Fulfill with X-Payment-Proof
-  res = await fetch('https://relay.base.org${selectedResource.path}', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Payment-Proof': signature,
-      'X-Payer-Address': account.address
-    },
-    body: JSON.stringify(${requestBodyText})
-  });
-}
-
-const data = await res.json();
-console.log(data);`;
+  // Sign EIP-712 TransferWithAuthorization on Base and re-send
+}`;
   };
 
   return (
@@ -257,81 +275,91 @@ console.log(data);`;
       <HeaderNav
         currentPage="playground"
         onNavigate={onNavigate}
-        network={network}
-        setNetwork={setNetwork}
-        agentBalance={agentBalance}
         onOpenMcp={onOpenMcp}
         onOpenDiscovery={onOpenDiscovery}
-        onResetBalance={onResetBalance}
       />
 
       <main className="flex-1 w-full">
         <div className="max-w-[1400px] w-full mx-auto px-6 md:px-12 lg:px-16 py-16 md:py-20">
           
-          {/* Page Title */}
+          {/* Page Title & Dashboard Intro */}
           <div className="max-w-3xl mb-10">
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
-              <span className="size-1.5 rounded-full bg-blue-500" />
-              <span>Live Execution & Inspector</span>
+              <span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
+              <span>Base Mainnet x402 Dashboard</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
               Execute x402 payments on Base
             </h1>
             <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
-              Send raw requests to any endpoint. Watch the gateway return HTTP 402 Payment Required, sign the authentic EIP-712 transfer authorization, and receive the live verified payload.
+              Connect your Base wallet via RainbowKit to test real pay-per-request capabilities. Every call is paid in real Base USDC over the open x402 standard with cryptographic EIP-712 settlement.
             </p>
           </div>
 
-          {/* 2-Column Playground Grid */}
+          {/* 2-Column Playground Dashboard Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
             
-            {/* Left Column: Config & Request Form (5 cols) */}
+            {/* Left Column: Wallet Connection & Request Form (5 cols) */}
             <div className="lg:col-span-5 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-7 flex flex-col justify-between">
               <div>
-                {/* Agent Key / Signer Identity Card */}
-                <div className="rounded-xl bg-neutral-950/80 p-4 border border-neutral-800/80 mb-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono text-neutral-400 font-medium">Signing Identity</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newWallet = resetAgentWallet();
-                        setAgentWallet(newWallet);
-                      }}
-                      title="Generate new ephemeral agent private key"
-                      className="text-[11px] font-mono text-neutral-400 hover:text-white transition-colors flex items-center gap-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
-                    >
-                      <RotateCcw className="size-3 text-neutral-400" />
-                      <span>Rotate Key</span>
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-mono text-xs text-neutral-200">
-                      <code>{agentWallet.address.slice(0, 10)}...{agentWallet.address.slice(-8)}</code>
+                
+                {/* RainbowKit Wallet Card (Exclusive to Dashboard) */}
+                <div className="rounded-xl bg-neutral-950/90 p-4 border border-neutral-800/90 mb-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 font-medium">
+                      <Wallet className="size-3.5 text-blue-400" />
+                      <span>Wallet & Settlement</span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                      Base EIP-712 Signer
-                    </span>
+                    {isConnected && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                        Base Mainnet
+                      </span>
+                    )}
                   </div>
-                  {hasInjectedWallet && (
-                    <div className="mt-3 pt-2.5 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono">
-                      <span className="text-neutral-500">Signing Mode:</span>
-                      <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setSigningMode('agent')}
-                          className={`px-2 py-0.5 rounded text-[11px] ${signingMode === 'agent' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}
-                        >
-                          Agent Key
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSigningMode('browser')}
-                          className={`px-2 py-0.5 rounded text-[11px] ${signingMode === 'browser' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}
-                        >
-                          Browser Wallet
-                        </button>
+
+                  {/* RainbowKit ConnectButton Component */}
+                  <div className="mb-3">
+                    <ConnectButton
+                      showBalance={false}
+                      chainStatus="icon"
+                      accountStatus="avatar"
+                    />
+                  </div>
+
+                  {/* Connected Wallet Onchain Stats */}
+                  {isConnected ? (
+                    <div className="pt-2.5 border-t border-neutral-800/70 space-y-2 text-xs font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-500">Base USDC Balance:</span>
+                        <span className="text-neutral-200 font-semibold">
+                          {isBalanceLoading ? (
+                            'Fetching balance...'
+                          ) : realUsdcBalance !== null ? (
+                            `${realUsdcBalance.toFixed(4)} USDC`
+                          ) : (
+                            '0.0000 USDC'
+                          )}
+                        </span>
                       </div>
+                      
+                      {!isBaseMainnet && (
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] flex items-center justify-between">
+                          <span>Please switch to Base Mainnet</span>
+                          <button
+                            type="button"
+                            onClick={() => switchChain({ chainId: base.id })}
+                            className="px-2 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400 transition-colors"
+                          >
+                            Switch Chain
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-neutral-800/70">
+                      <p className="text-[11px] text-neutral-500 leading-relaxed font-sans">
+                        A connected Base wallet with USDC is required to test. Gasless EIP-712 authorizations sign directly in your wallet without native ETH gas.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -370,107 +398,148 @@ console.log(data);`;
                   </p>
                 </div>
 
-                {/* JSON Parameter Editor */}
-                <div className="mb-5">
+                {/* JSON Request Body Editor */}
+                <div className="mb-6">
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-mono font-medium text-neutral-400 uppercase tracking-wider">
-                      Request Parameters (JSON)
+                      Request Body (JSON)
                     </label>
                     <button
                       type="button"
                       onClick={() => setRequestBodyText(JSON.stringify(selectedResource.defaultParams, null, 2))}
-                      className="text-[11px] font-mono text-neutral-500 hover:text-neutral-300 flex items-center gap-1 transition-colors"
+                      className="text-[11px] font-mono text-neutral-500 hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 rounded"
                     >
-                      <FaRotateLeft className="size-2.5" />
-                      <span>Reset</span>
+                      Reset Payload
                     </button>
                   </div>
                   <textarea
+                    rows={6}
                     value={requestBodyText}
                     onChange={(e) => setRequestBodyText(e.target.value)}
-                    rows={8}
-                    className="w-full rounded-xl bg-black/60 text-neutral-200 p-4 font-mono text-xs outline-none border border-neutral-800 focus:border-neutral-700 resize-none leading-relaxed focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="w-full bg-neutral-950 font-mono text-xs text-neutral-200 border border-neutral-800 rounded-xl p-3.5 outline-none focus:border-neutral-600 focus-visible:ring-2 focus-visible:ring-blue-500 resize-y"
+                    spellCheck={false}
                   />
                 </div>
+              </div>
 
+              {/* Action Button & Validation Alert */}
+              <div>
                 {errorMsg && (
-                  <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-3.5 mb-5 flex items-start gap-2 text-rose-400 text-xs font-mono">
+                  <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 text-xs text-red-400 font-mono">
                     <AlertCircle className="size-4 shrink-0 mt-0.5" />
                     <span>{errorMsg}</span>
                   </div>
                 )}
-              </div>
 
-              {/* Execute Button */}
-              <motion.button
-                type="button"
-                onClick={handleExecute}
-                disabled={executing}
-                whileTap={{ scale: 0.98 }}
-                className="w-full min-h-11 rounded-full bg-neutral-100 text-neutral-950 font-medium text-sm flex items-center justify-center gap-2 hover:bg-white disabled:opacity-50 transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
-              >
-                <FaPlay className="size-2.5" />
-                <span>{executing ? 'Negotiating x402 Handshake...' : `Execute via x402 ($${selectedResource.priceUsdc.toFixed(2)} USDC)`}</span>
-              </motion.button>
+                {!isConnected ? (
+                  <div className="w-full p-4 rounded-xl bg-neutral-950 border border-neutral-800 flex flex-col items-center justify-center gap-2.5 text-center">
+                    <span className="text-xs text-neutral-300 font-medium">Connect wallet to unlock execution</span>
+                    <ConnectButton />
+                  </div>
+                ) : !isBaseMainnet ? (
+                  <button
+                    type="button"
+                    onClick={() => switchChain({ chainId: base.id })}
+                    className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium text-xs font-mono transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span>Switch to Base Mainnet</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={executing}
+                    onClick={handleExecute}
+                    className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-neutral-950 font-medium text-xs font-mono transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    {executing ? (
+                      <>
+                        <span className="size-3.5 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin" />
+                        <span>Signing & Settling on Base...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaPlay className="size-3" />
+                        <span>Pay ${selectedResource.priceUsdc.toFixed(2)} USDC & Execute</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Right Column: Handshake State & Console (7 cols) */}
-            <div className="lg:col-span-7 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-7 flex flex-col justify-between">
-              <div>
-                {/* 4-Step Handshake Progress Indicators */}
-                <div className="mb-6">
-                  <span className="text-xs font-mono text-neutral-400 uppercase tracking-wider block mb-3 font-medium">
-                    Protocol Handshake Execution
+            {/* Right Column: Execution Inspector & Wire Console (7 cols) */}
+            <div className="lg:col-span-7 flex flex-col gap-6">
+              
+              {/* Stepper Handshake Card */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <span className="text-xs font-mono text-neutral-400 font-medium">x402 Protocol Settlement Flow</span>
+                  <span className="text-xs font-mono text-neutral-500">
+                    {step === 1 && '1. Unauthenticated Request'}
+                    {step === 2 && '2. HTTP 402 Challenge'}
+                    {step === 3 && '3. EIP-712 Wallet Signature'}
+                    {step === 4 && `4. Verified & Settled (${executionTimeMs}ms)`}
                   </span>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 1 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
-                    }`}>
-                      <div className="text-[10px] font-mono">STEP 1</div>
-                      <div className="text-xs truncate mt-0.5">1. Request</div>
-                    </div>
-                    <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 2 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
-                    }`}>
-                      <div className="text-[10px] font-mono">STEP 2</div>
-                      <div className="text-xs truncate mt-0.5">2. 402 Challenge</div>
-                    </div>
-                    <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 3 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
-                    }`}>
-                      <div className="text-[10px] font-mono">STEP 3</div>
-                      <div className="text-xs truncate mt-0.5">3. EIP-712 Sign</div>
-                    </div>
-                    <div className={`p-2.5 rounded-xl border text-center transition-all ${
-                      step >= 4 ? 'bg-neutral-800/90 border-blue-500/60 text-blue-400 font-medium' : 'bg-neutral-900/40 border-neutral-800/80 text-neutral-500'
-                    }`}>
-                      <div className="text-[10px] font-mono">STEP 4</div>
-                      <div className="text-xs truncate mt-0.5">4. 200 Payload</div>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Console Tabs */}
-                <div className="flex items-center justify-between pb-3 mb-4 border-b border-neutral-800/80">
+                <div className="grid grid-cols-4 gap-2">
+                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
+                    step >= 1 ? 'bg-neutral-900 border-neutral-700 text-neutral-200' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
+                  }`}>
+                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 1</span>
+                    <span className="font-semibold">POST /v1</span>
+                  </div>
+
+                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
+                    step >= 2 ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
+                  }`}>
+                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 2</span>
+                    <span className="font-semibold">HTTP 402</span>
+                  </div>
+
+                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
+                    step >= 3 ? 'bg-blue-500/10 border-blue-500/30 text-blue-300' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
+                  }`}>
+                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 3</span>
+                    <span className="font-semibold">EIP-712 Sign</span>
+                  </div>
+
+                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
+                    step === 4 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
+                  }`}>
+                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 4</span>
+                    <span className="font-semibold">HTTP 200 OK</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wire Inspector Console */}
+              <div className="rounded-2xl bg-neutral-950 border border-neutral-800/80 overflow-hidden flex flex-col flex-1">
+                {/* Tabs Header */}
+                <div className="flex items-center justify-between border-b border-neutral-800/80 px-4 py-2.5 bg-neutral-900/40">
                   <div className="flex items-center gap-2" role="tablist" aria-label="Playground output format tabs">
                     <button
                       type="button"
                       role="tab"
                       aria-selected={activeTab === 'console'}
                       onClick={() => setActiveTab('console')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                        activeTab === 'console' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
+                        activeTab === 'console'
+                          ? 'bg-neutral-800 text-white font-medium'
+                          : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
-                      Console Output
+                      Wire Console
                     </button>
                     <button
                       type="button"
                       role="tab"
                       aria-selected={activeTab === 'curl'}
                       onClick={() => setActiveTab('curl')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                        activeTab === 'curl' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
+                        activeTab === 'curl'
+                          ? 'bg-neutral-800 text-white font-medium'
+                          : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
                       cURL
@@ -478,153 +547,148 @@ console.log(data);`;
                     <button
                       type="button"
                       role="tab"
-                      aria-selected={activeTab === 'python'}
-                      onClick={() => setActiveTab('python')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                        activeTab === 'python' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
+                      aria-selected={activeTab === 'ts'}
+                      onClick={() => setActiveTab('ts')}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
+                        activeTab === 'ts'
+                          ? 'bg-neutral-800 text-white font-medium'
+                          : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
-                      Python
+                      TypeScript (Viem)
                     </button>
                     <button
                       type="button"
                       role="tab"
-                      aria-selected={activeTab === 'ts'}
-                      onClick={() => setActiveTab('ts')}
-                      className={`px-3 py-1 rounded-full text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                        activeTab === 'ts' ? 'bg-neutral-100 text-neutral-950 font-semibold' : 'text-neutral-400 hover:text-neutral-200'
+                      aria-selected={activeTab === 'python'}
+                      onClick={() => setActiveTab('python')}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
+                        activeTab === 'python'
+                          ? 'bg-neutral-800 text-white font-medium'
+                          : 'text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
-                      TypeScript
+                      Python
                     </button>
                   </div>
 
-                  {activeTab !== 'console' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const code = activeTab === 'curl' ? getCurlSnippet() : activeTab === 'python' ? getPythonSnippet() : getTsSnippet();
-                        copyCode(code);
-                      }}
-                      className="text-xs font-mono text-neutral-300 hover:text-white flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800"
-                    >
-                      {copiedCode ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3 text-neutral-400" />}
-                      <span>{copiedCode ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeTab === 'console') {
+                        copyCode(JSON.stringify(responseData || challenge402 || {}, null, 2));
+                      } else if (activeTab === 'curl') {
+                        copyCode(getCurlSnippet());
+                      } else if (activeTab === 'ts') {
+                        copyCode(getTsSnippet());
+                      } else {
+                        copyCode(getPythonSnippet());
+                      }
+                    }}
+                    className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                    title="Copy to clipboard"
+                  >
+                    {copiedCode ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3" />}
+                  </button>
                 </div>
 
-                {/* Content Panel */}
-                {activeTab === 'console' && (
-                  <div className="rounded-xl bg-black/80 text-neutral-300 p-4 font-mono text-xs border border-neutral-800/80 overflow-x-auto min-h-[300px] max-h-[460px] overflow-y-auto leading-relaxed">
-                    {step === 1 && !executing && !responseData && (
-                      <div className="text-neutral-500 py-16 text-center font-sans">
-                        Click <strong className="text-neutral-200 font-mono">"Execute via x402"</strong> to launch simulation.
-                      </div>
-                    )}
-
-                    {challenge402 && (
-                      <div className="mb-4 pb-4 border-b border-neutral-800/80">
-                        <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
-                          <span className="size-1.5 rounded-full bg-blue-500" />
-                          <span>HTTP/1.1 402 Payment Required</span>
+                {/* Tab Content Display */}
+                <div className="p-4 sm:p-5 flex-1 font-mono text-xs overflow-auto max-h-[520px]">
+                  {activeTab === 'console' && (
+                    <div className="space-y-4">
+                      {/* Step 2 Challenge Output */}
+                      {challenge402 && (
+                        <div>
+                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
+                            <span>HTTP 402 PAYMENT REQUIRED (BASE MAINNET)</span>
+                            <span className="text-amber-400 font-semibold">Status 402</span>
+                          </div>
+                          <pre className="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">
+                            {JSON.stringify(challenge402, null, 2)}
+                          </pre>
                         </div>
-                        <div className="text-neutral-400 text-[11px] mb-2 font-mono">
-                          Receiver: {challenge402.paymentRequirements.payTo} • Token: Base USDC ({challenge402.paymentRequirements.tokenAddress})
-                        </div>
-                        <pre className="text-neutral-300 text-[11px] bg-black/50 p-3 rounded-lg border border-neutral-800">
-                          {JSON.stringify(challenge402, null, 2)}
-                        </pre>
-                      </div>
-                    )}
+                      )}
 
-                    {activeProof && (
-                      <div className="mb-4 pb-4 border-b border-neutral-800/80">
-                        <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
-                          <span className="size-1.5 rounded-full bg-blue-500" />
-                          <span>Authentic EIP-712 ERC-3009 TransferWithAuthorization</span>
+                      {/* Step 3 Active Proof Output */}
+                      {activeProof && (
+                        <div>
+                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
+                            <span>EIP-712 AUTHORIZATION PROOF (SIGNED BY CONNECTED WALLET)</span>
+                            <span className="text-blue-400 font-semibold">65-byte Secp256k1</span>
+                          </div>
+                          <pre className="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">
+                            {JSON.stringify(activeProof, null, 2)}
+                          </pre>
                         </div>
-                        <div className="text-neutral-400 text-[11px] mb-2 font-mono">
-                          Payer Signer: {activeProof.payerAddress}
+                      )}
+
+                      {/* Step 4 Verification & Live Data */}
+                      {verificationResult && (
+                        <div>
+                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
+                            <span>CRYPTOGRAPHIC VERIFICATION</span>
+                            <span className="text-emerald-400 font-semibold">Signature Recovered</span>
+                          </div>
+                          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] space-y-1">
+                            <div>Payer Address: <code>{verificationResult.payer}</code></div>
+                            <div>Authorized Cost: <code>{verificationResult.amount} micro-USDC (${selectedResource.priceUsdc.toFixed(2)})</code></div>
+                            <div>Base Chain: <code>8453 (Base Mainnet)</code></div>
+                            <div>Settled Tx: <code>{verificationResult.txHash}</code></div>
+                          </div>
                         </div>
-                        <pre className="text-blue-300/90 text-[11px] bg-black/50 p-3 rounded-lg border border-neutral-800 break-all whitespace-pre-wrap">
-                          {JSON.stringify({
-                            payer: activeProof.payerAddress,
-                            clientSignature: activeProof.clientSignature,
-                            authorization: activeProof.authorization
-                          }, null, 2)}
-                        </pre>
-                      </div>
-                    )}
+                      )}
 
-                    {verificationResult && (
-                      <div className="mb-4 pb-4 border-b border-neutral-800/80">
-                        <div className="text-neutral-200 font-semibold mb-1 flex items-center gap-2">
-                          <span className="size-1.5 rounded-full bg-emerald-500" />
-                          <span>Cryptographic Signature Verification Passed</span>
+                      {responseData && (
+                        <div>
+                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
+                            <span>LIVE ENDPOINT RESPONSE (HTTP 200 OK)</span>
+                            <span className="text-emerald-400 font-semibold">{executionTimeMs}ms</span>
+                          </div>
+                          <pre className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 text-neutral-200 overflow-x-auto text-[11px] leading-relaxed">
+                            {JSON.stringify(responseData, null, 2)}
+                          </pre>
                         </div>
-                        <div className="text-neutral-300 text-[11px] space-y-1">
-                          <div>Status: <span className="text-emerald-400 font-semibold">VALID_RECOVERED_SIGNATURE</span></div>
-                          <div>Verified Signer: <code className="text-neutral-200">{verificationResult.payer}</code></div>
-                          <div>Settlement Tx: <code className="text-neutral-400">{verificationResult.txHash}</code></div>
+                      )}
+
+                      {!challenge402 && !executing && (
+                        <div className="py-16 text-center text-neutral-500 text-xs">
+                          {isConnected ? (
+                            <span>Connected: <code className="text-neutral-300">{address?.slice(0, 8)}...{address?.slice(-6)}</code>. Click "Pay & Execute" to sign and retrieve live data.</span>
+                          ) : (
+                            <span>Connect your Base wallet on the left to initiate the x402 payment cycle.</span>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
 
-                    {responseData && (
-                      <div>
-                        <div className="text-emerald-400 font-semibold mb-1 flex items-center gap-2">
-                          <span className="size-1.5 rounded-full bg-emerald-500" />
-                          <span>HTTP/1.1 200 OK • Live Payload ({executionTimeMs}ms)</span>
-                        </div>
-                        <pre className="text-neutral-200 text-[11px] bg-black/50 p-3 rounded-lg border border-neutral-800">
-                          {JSON.stringify(responseData, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {activeTab === 'curl' && (
+                    <pre className="text-neutral-300 leading-relaxed overflow-x-auto">
+                      {getCurlSnippet()}
+                    </pre>
+                  )}
 
-                {activeTab === 'curl' && (
-                  <pre className="rounded-xl bg-black/80 text-neutral-300 p-4 font-mono text-xs overflow-x-auto min-h-[300px] leading-relaxed border border-neutral-800/80">
-                    <code>{getCurlSnippet()}</code>
-                  </pre>
-                )}
+                  {activeTab === 'ts' && (
+                    <pre className="text-neutral-300 leading-relaxed overflow-x-auto">
+                      {getTsSnippet()}
+                    </pre>
+                  )}
 
-                {activeTab === 'python' && (
-                  <pre className="rounded-xl bg-black/80 text-neutral-300 p-4 font-mono text-xs overflow-x-auto min-h-[300px] leading-relaxed border border-neutral-800/80">
-                    <code>{getPythonSnippet()}</code>
-                  </pre>
-                )}
-
-                {activeTab === 'ts' && (
-                  <pre className="rounded-xl bg-black/80 text-neutral-300 p-4 font-mono text-xs overflow-x-auto min-h-[300px] leading-relaxed border border-neutral-800/80">
-                    <code>{getTsSnippet()}</code>
-                  </pre>
-                )}
+                  {activeTab === 'python' && (
+                    <pre className="text-neutral-300 leading-relaxed overflow-x-auto">
+                      {getPythonSnippet()}
+                    </pre>
+                  )}
+                </div>
               </div>
 
-              {/* Status bar */}
-              <div className="mt-5 pt-3 flex items-center justify-between text-xs font-mono text-neutral-500 border-t border-neutral-800/60">
-                <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-blue-500" />
-                  Network: {network === 'base' ? 'Base Mainnet (8453)' : 'Base Sepolia (84532)'}
-                </span>
-                <span>Settlement: Gasless ERC-3009</span>
-              </div>
             </div>
-
           </div>
 
         </div>
       </main>
 
-      {/* Footer */}
-      <Footer
-        onNavigate={onNavigate}
-        onOpenMcp={onOpenMcp}
-        onOpenDiscovery={onOpenDiscovery}
-      />
+      <Footer />
     </div>
   );
 };

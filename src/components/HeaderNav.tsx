@@ -5,12 +5,8 @@ import { FaArrowRight, FaXmark } from 'react-icons/fa6';
 export interface HeaderNavProps {
   currentPage: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs';
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
-  network: 'base' | 'base-sepolia';
-  setNetwork: (net: 'base' | 'base-sepolia') => void;
-  agentBalance: number;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
-  onResetBalance: () => void;
 }
 
 const headerVariants: Variants = {
@@ -25,13 +21,7 @@ const headerVariants: Variants = {
 
 export const HeaderNav: React.FC<HeaderNavProps> = ({
   currentPage,
-  onNavigate,
-  network,
-  setNetwork,
-  agentBalance,
-  onOpenMcp,
-  onOpenDiscovery,
-  onResetBalance
+  onNavigate
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -79,27 +69,12 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             ))}
           </nav>
 
-          {/* Right Actions: Network & Balance & Playground CTA */}
+          {/* Right Actions */}
           <div className="hidden sm:flex items-center gap-3">
-            {/* Network pill */}
-            <button
-              onClick={() => setNetwork(network === 'base' ? 'base-sepolia' : 'base')}
-              className="inline-flex min-h-8 items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/80 px-3.5 text-xs font-medium text-neutral-300 hover:border-neutral-700 transition-colors"
-            >
-              <span className={`size-2 rounded-full ${network === 'base' ? 'bg-blue-500' : 'bg-amber-400'}`} />
-              <span>{network === 'base' ? 'Base Mainnet' : 'Base Sepolia'}</span>
-            </button>
-
-            {/* Balance counter */}
-            <div className="inline-flex min-h-8 items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/80 px-3.5 text-xs font-mono font-medium text-neutral-200">
-              <span>${agentBalance.toFixed(2)} USDC</span>
-              <button
-                onClick={onResetBalance}
-                title="Reset balance to $10.00"
-                className="text-neutral-500 hover:text-neutral-300 ml-0.5 text-[11px]"
-              >
-                ↻
-              </button>
+            {/* Network pill - Base Mainnet Only */}
+            <div className="inline-flex min-h-8 items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/80 px-3.5 text-xs font-medium text-neutral-300">
+              <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
+              <span>Base Mainnet</span>
             </div>
 
             {/* Test CTA */}
@@ -165,8 +140,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               </nav>
 
               <div className="mt-4 pt-3 border-t border-neutral-800 flex items-center justify-between">
-                <span className="text-xs text-neutral-400">Balance</span>
-                <span className="text-xs font-mono font-semibold text-neutral-100">${agentBalance.toFixed(2)} USDC</span>
+                <span className="text-xs text-neutral-400">Network</span>
+                <span className="text-xs font-mono font-medium text-blue-400">Base (8453)</span>
               </div>
             </motion.div>
           ) : null}

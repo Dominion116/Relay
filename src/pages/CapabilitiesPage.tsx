@@ -8,23 +8,15 @@ import { BookOpen, TrendingUp, CloudSun, MapPin, Calendar, CheckCircle2, Globe, 
 
 interface CapabilitiesPageProps {
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
-  network: 'base' | 'base-sepolia';
-  setNetwork: (net: 'base' | 'base-sepolia') => void;
-  agentBalance: number;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
-  onResetBalance: () => void;
   onSelectResourceForPlayground: (id: string) => void;
 }
 
 export const CapabilitiesPage: React.FC<CapabilitiesPageProps> = ({
   onNavigate,
-  network,
-  setNetwork,
-  agentBalance,
   onOpenMcp,
   onOpenDiscovery,
-  onResetBalance,
   onSelectResourceForPlayground
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -87,12 +79,8 @@ export const CapabilitiesPage: React.FC<CapabilitiesPageProps> = ({
       <HeaderNav
         currentPage="capabilities"
         onNavigate={onNavigate}
-        network={network}
-        setNetwork={setNetwork}
-        agentBalance={agentBalance}
         onOpenMcp={onOpenMcp}
         onOpenDiscovery={onOpenDiscovery}
-        onResetBalance={onResetBalance}
       />
 
       {/* Main Container */}
