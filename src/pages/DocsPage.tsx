@@ -6,22 +6,14 @@ import { BookOpen, ShieldCheck, Terminal, Cpu, Database, Network, ArrowUpRight, 
 
 interface DocsPageProps {
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
-  network: 'base' | 'base-sepolia';
-  setNetwork: (net: 'base' | 'base-sepolia') => void;
-  agentBalance: number;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
-  onResetBalance: () => void;
 }
 
 export const DocsPage: React.FC<DocsPageProps> = ({
   onNavigate,
-  network,
-  setNetwork,
-  agentBalance,
   onOpenMcp,
-  onOpenDiscovery,
-  onResetBalance
+  onOpenDiscovery
 }) => {
   const [activeSection, setActiveSection] = useState<string>('quickstart');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -94,12 +86,8 @@ export const DocsPage: React.FC<DocsPageProps> = ({
       <HeaderNav
         currentPage="docs"
         onNavigate={onNavigate}
-        network={network}
-        setNetwork={setNetwork}
-        agentBalance={agentBalance}
         onOpenMcp={onOpenMcp}
         onOpenDiscovery={onOpenDiscovery}
-        onResetBalance={onResetBalance}
       />
 
       {/* Main 3-Column Docs Layout */}
@@ -645,7 +633,7 @@ if res.status_code == 402:
                 <div className="text-[11px] text-neutral-500 uppercase tracking-wider font-semibold">Network telemetry</div>
                 <div className="flex justify-between text-neutral-400">
                   <span>Network:</span>
-                  <span className="text-neutral-200">{network === 'base' ? 'Base (8453)' : 'Sepolia (84532)'}</span>
+                  <span className="text-neutral-200">Base Mainnet (8453)</span>
                 </div>
                 <div className="flex justify-between text-neutral-400">
                   <span>Token:</span>
@@ -656,8 +644,8 @@ if res.status_code == 402:
                   <span className="text-neutral-200">Gasless ERC-3009</span>
                 </div>
                 <div className="flex justify-between text-neutral-400 pt-1 border-t border-neutral-800/60">
-                  <span>Test balance:</span>
-                  <span className="text-neutral-100 font-bold">${agentBalance.toFixed(2)} USDC</span>
+                  <span>Token Address:</span>
+                  <span className="text-neutral-100">0x8335...2913</span>
                 </div>
               </div>
 

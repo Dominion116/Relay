@@ -11,8 +11,6 @@ export type PageRoute = 'home' | 'capabilities' | 'playground' | 'protocol' | 'd
 
 export const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PageRoute>('home');
-  const [network, setNetwork] = useState<'base' | 'base-sepolia'>('base');
-  const [agentBalance, setAgentBalance] = useState<number>(10.0);
   const [isMcpOpen, setIsMcpOpen] = useState<boolean>(false);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState<boolean>(false);
   const [selectedResourceId, setSelectedResourceId] = useState<string>('crypto_price');
@@ -22,14 +20,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, [currentPage]);
-
-  const handleDeductBalance = (amountUsdc: number) => {
-    setAgentBalance(prev => Math.max(0, Number((prev - amountUsdc).toFixed(2))));
-  };
-
-  const handleResetBalance = () => {
-    setAgentBalance(10.0);
-  };
 
   const handleSelectResourceForPlayground = (id: string) => {
     setSelectedResourceId(id);
@@ -57,12 +47,8 @@ export const App: React.FC = () => {
       {currentPage === 'capabilities' && (
         <CapabilitiesPage
           onNavigate={setCurrentPage}
-          network={network}
-          setNetwork={setNetwork}
-          agentBalance={agentBalance}
           onOpenMcp={() => setIsMcpOpen(true)}
           onOpenDiscovery={() => setIsDiscoveryOpen(true)}
-          onResetBalance={handleResetBalance}
           onSelectResourceForPlayground={handleSelectResourceForPlayground}
         />
       )}
@@ -70,13 +56,8 @@ export const App: React.FC = () => {
       {currentPage === 'playground' && (
         <PlaygroundPage
           onNavigate={setCurrentPage}
-          network={network}
-          setNetwork={setNetwork}
-          agentBalance={agentBalance}
-          onDeductBalance={handleDeductBalance}
           onOpenMcp={() => setIsMcpOpen(true)}
           onOpenDiscovery={() => setIsDiscoveryOpen(true)}
-          onResetBalance={handleResetBalance}
           initialResourceId={selectedResourceId}
           initialQuery={initialQuery}
         />
@@ -85,24 +66,16 @@ export const App: React.FC = () => {
       {currentPage === 'protocol' && (
         <ProtocolPage
           onNavigate={setCurrentPage}
-          network={network}
-          setNetwork={setNetwork}
-          agentBalance={agentBalance}
           onOpenMcp={() => setIsMcpOpen(true)}
           onOpenDiscovery={() => setIsDiscoveryOpen(true)}
-          onResetBalance={handleResetBalance}
         />
       )}
 
       {currentPage === 'docs' && (
         <DocsPage
           onNavigate={setCurrentPage}
-          network={network}
-          setNetwork={setNetwork}
-          agentBalance={agentBalance}
           onOpenMcp={() => setIsMcpOpen(true)}
           onOpenDiscovery={() => setIsDiscoveryOpen(true)}
-          onResetBalance={handleResetBalance}
         />
       )}
 
