@@ -100,12 +100,12 @@ export const Playground: React.FC<PlaygroundProps> = ({ network, agentBalance, o
 
   const getCurlSnippet = () => {
     return `# 1. Request endpoint (returns HTTP 402 with Base payment parameters)
-curl -X POST https://relay.xyz${selectedResource.path} \\
+curl -X POST https://relayx402.vercel.app${selectedResource.path} \\
   -H "Content-Type: application/json" \\
   -d '${requestBodyText.replace(/\n/g, '').replace(/\s+/g, ' ')}'
 
 # 2. Retry with Base EIP-712 USDC transfer authorization
-curl -X POST https://relay.xyz${selectedResource.path} \\
+curl -X POST https://relayx402.vercel.app${selectedResource.path} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: x402 <base_eip712_signature>" \\
   -d '${requestBodyText.replace(/\n/g, '').replace(/\s+/g, ' ')}'`;
@@ -114,7 +114,7 @@ curl -X POST https://relay.xyz${selectedResource.path} \\
   const getPythonSnippet = () => {
     return `import requests
 
-url = "https://relay.xyz${selectedResource.path}"
+url = "https://relayx402.vercel.app${selectedResource.path}"
 payload = ${requestBodyText}
 
 # Request endpoint

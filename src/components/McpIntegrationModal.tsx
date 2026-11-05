@@ -80,7 +80,7 @@ export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }
 
           <div className="rounded-xl bg-neutral-900/60 border border-neutral-800 p-4 text-xs font-mono text-neutral-300 space-y-1.5">
             <div className="font-semibold text-neutral-200 uppercase tracking-wide text-[11px]">Environment requirements</div>
-            <div>• <code className="text-white">BASE_NETWORK</code>: "base" or "base-sepolia"</div>
+            <div>• <code className="text-white">BASE_NETWORK</code>: "base" (Base Mainnet)</div>
             <div>• <code className="text-white">BASE_PRIVATE_KEY</code>: standard 64-char hex key holding Base USDC</div>
           </div>
         </div>

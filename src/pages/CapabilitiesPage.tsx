@@ -171,7 +171,7 @@ export const CapabilitiesPage: React.FC<CapabilitiesPageProps> = ({
                     <code className="truncate mr-2">{res.path}</code>
                     <button
                       type="button"
-                      onClick={() => copyPath(`https://relay.base.org${res.path}`, res.id)}
+                      onClick={() => copyPath(`https://relayx402.vercel.app${res.path}`, res.id)}
                       title="Copy endpoint path"
                       className="text-neutral-500 hover:text-neutral-200 transition-colors shrink-0 text-[11px]"
                     >

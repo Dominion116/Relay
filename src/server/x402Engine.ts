@@ -10,7 +10,7 @@ export const BASE_USDC_SEPOLIA = getAddress('0x036CbD53842c5426634e7929541eC2318
 // Default merchant receiver address on Base
 const envTreasury = typeof process !== 'undefined' && process.env?.RELAY_TREASURY_ADDRESS
   ? process.env.RELAY_TREASURY_ADDRESS
-  : '0x892A0e28F3d343054eA8C0a3Ea625DC0BA0241a5';
+  : '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072';
 export const DEFAULT_TREASURY_ADDRESS = getAddress(envTreasury);
 
 export const RELAY_RESOURCES: X402Resource[] = [
@@ -489,7 +489,7 @@ export async function dispatchResourceRequest(resourceId: string, params: Record
   }
 }
 
-export function getWellKnownManifest(origin: string = 'https://relay.xyz'): WellKnownX402Manifest {
+export function getWellKnownManifest(origin: string = 'https://relayx402.vercel.app'): WellKnownX402Manifest {
   return {
     x402Version: 2,
     name: 'Relay',

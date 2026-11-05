@@ -302,7 +302,7 @@ export const DocsPage: React.FC<DocsPageProps> = ({
                   <div className="flex items-center justify-between px-4 py-2 bg-neutral-900/60 text-xs font-mono text-neutral-400">
                     <span>1. Send unauthenticated request</span>
                     <button
-                      onClick={() => copyToClipboard(`curl -X POST https://relay.base.org/api/v1/crypto/price \\\n  -H "Content-Type: application/json" \\\n  -d '{"coins":"bitcoin,ethereum","currencies":"usd"}'`, 'quickstart-curl')}
+                      onClick={() => copyToClipboard(`curl -X POST https://relayx402.vercel.app/api/v1/crypto/price \\\n  -H "Content-Type: application/json" \\\n  -d '{"coins":"bitcoin,ethereum","currencies":"usd"}'`, 'quickstart-curl')}
                       className="hover:text-white transition-colors flex items-center gap-1"
                     >
                       {copiedCode === 'quickstart-curl' ? <FaCheck className="size-2.5 text-emerald-400" /> : <FaCopy className="size-2.5" />}
@@ -310,7 +310,7 @@ export const DocsPage: React.FC<DocsPageProps> = ({
                     </button>
                   </div>
                   <pre className="p-4 text-xs font-mono text-neutral-300 overflow-x-auto">
-                    <code>{`curl -X POST https://relay.base.org/api/v1/crypto/price \\
+                    <code>{`curl -X POST https://relayx402.vercel.app/api/v1/crypto/price \\
   -H "Content-Type: application/json" \\
   -d '{"coins":"bitcoin,ethereum","currencies":"usd"}'`}</code>
                   </pre>
@@ -416,7 +416,7 @@ export const DocsPage: React.FC<DocsPageProps> = ({
                 </p>
                 <div className="rounded-xl bg-neutral-950/90 border border-neutral-800/80 p-4 font-mono text-xs">
                   <div className="text-neutral-500 mb-2">Base USDC Address: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</div>
-                  <div className="text-neutral-500">Chain ID: 8453 (Base Mainnet) | 84532 (Base Sepolia)</div>
+                  <div className="text-neutral-500">Chain ID: 8453 (Base Mainnet)</div>
                 </div>
               </section>
 
@@ -465,7 +465,7 @@ const account = privateKeyToAccount(process.env.AGENT_KEY as \`0x\${string}\`);
 const client = createWalletClient({ account, chain: base, transport: http() });
 
 export async function callRelay(path: string, body: object) {
-  let res = await fetch(\`https://relay.base.org\${path}\`, {
+  let res = await fetch(\`https://relayx402.vercel.app\${path}\`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -501,7 +501,7 @@ export async function callRelay(path: string, body: object) {
       }
     });
 
-    res = await fetch(\`https://relay.base.org\${path}\`, {
+    res = await fetch(\`https://relayx402.vercel.app\${path}\`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -533,7 +533,7 @@ from eth_account import Account
 
 account = Account.from_key("0x...")
 
-res = requests.post("https://relay.base.org/api/v1/weather", json={"query": "Berlin"})
+res = requests.post("https://relayx402.vercel.app/api/v1/weather", json={"query": "Berlin"})
 if res.status_code == 402:
     challenge = res.json()
     # Sign EIP-712 payload using account.sign_typed_data

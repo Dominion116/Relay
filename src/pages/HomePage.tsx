@@ -37,7 +37,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     {
       question: 'What data capabilities are currently live on Relay?',
       answer:
-        'Relay provides 12 production endpoints across five primary categories: academic literature search and DOI retrieval (OpenAlex), cryptocurrency spot prices and market metrics (CoinGecko), foreign exchange reference rates (Frankfurter / ECB), weather forecasts and geocoding (Open-Meteo and Photon), public holiday verification (Nager.Date), Wikidata entity lookups, real-time news headlines, and deterministic multi-source research packs.'
+        'Relay provides 12 production endpoints across five primary categories: academic literature search and DOI retrieval (OpenAlex), cryptocurrency spot prices and market metrics (Binance), foreign exchange reference rates (Frankfurter / ECB), weather forecasts and geocoding (Open-Meteo and Photon), public holiday verification (Nager.Date), Wikidata entity lookups, real-time news headlines, and deterministic multi-source research packs.'
     },
     {
       question: 'How do autonomous agents and LLMs integrate with Relay?',
@@ -47,7 +47,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     {
       question: 'Which blockchain networks and settlement assets are supported?',
       answer:
-        'Relay operates on Base Mainnet (Chain ID 8453) and Base Sepolia testnet (Chain ID 84532), settling exclusively in native Circle USDC.'
+        'Relay operates strictly on Base Mainnet (Chain ID 8453), settling exclusively in native Circle USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913).'
     }
   ];
 

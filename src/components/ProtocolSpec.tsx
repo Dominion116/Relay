@@ -94,7 +94,7 @@ export const ProtocolSpec: React.FC = () => {
 
             <div className="bg-background rounded-md p-3 border border-surface-border font-mono text-[11px] text-ink-secondary overflow-x-auto">
               <pre>{`GET /.well-known/x402 HTTP/1.1
-Host: relay.xyz
+Host: relayx402.vercel.app
 
 {
   "x402Version": 2,
@@ -103,7 +103,7 @@ Host: relay.xyz
   "chainId": 8453,
   "resources": [
     {
-      "url": "https://relay.xyz/v1/crypto/price",
+      "url": "https://relayx402.vercel.app/v1/crypto/price",
       "method": "POST",
       "amount": "40000",
       "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
