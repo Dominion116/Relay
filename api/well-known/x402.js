@@ -1093,6 +1093,8 @@ async function handleGatewayRequest(method, pathname, headers, rawBody, origin =
   const payerStr = Array.isArray(payerHeader) ? payerHeader[0] : payerHeader;
   if (rawStr.toLowerCase().startsWith("bearer ")) {
     rawStr = rawStr.slice(7).trim();
+  } else if (rawStr.toLowerCase().startsWith("x402 ")) {
+    rawStr = rawStr.slice(5).trim();
   }
   if (rawStr.startsWith("%7B") || rawStr.startsWith("%7b")) {
     try {
@@ -1124,6 +1126,15 @@ async function handleGatewayRequest(method, pathname, headers, rawBody, origin =
           timestamp: Date.now()
         };
       }
+    }
+    if (!proofObj.payerAddress && proofObj.payload?.from) {
+      proofObj.payerAddress = proofObj.payload.from;
+    }
+    if (!proofObj.clientSignature && proofObj.signature) {
+      proofObj.clientSignature = proofObj.signature;
+    }
+    if (!proofObj.authorization && proofObj.payload) {
+      proofObj.authorization = proofObj.payload;
     }
   } catch {
     return {

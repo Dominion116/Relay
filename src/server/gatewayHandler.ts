@@ -114,9 +114,11 @@ export async function handleGatewayRequest(
   let rawStr = (Array.isArray(proofHeader) ? proofHeader[0] : proofHeader).trim();
   const payerStr = Array.isArray(payerHeader) ? payerHeader[0] : payerHeader;
 
-  // Strip optional 'Bearer ' prefix
+  // Strip optional 'Bearer ' or 'x402 ' prefix
   if (rawStr.toLowerCase().startsWith('bearer ')) {
     rawStr = rawStr.slice(7).trim();
+  } else if (rawStr.toLowerCase().startsWith('x402 ')) {
+    rawStr = rawStr.slice(5).trim();
   }
 
   // Decode URI-encoding if present
@@ -155,6 +157,16 @@ export async function handleGatewayRequest(
           timestamp: Date.now()
         };
       }
+    }
+    // Normalize RFC x402 v2 payload fields into internal proof object
+    if (!proofObj.payerAddress && (proofObj as any).payload?.from) {
+      proofObj.payerAddress = (proofObj as any).payload.from;
+    }
+    if (!proofObj.clientSignature && (proofObj as any).signature) {
+      proofObj.clientSignature = (proofObj as any).signature;
+    }
+    if (!proofObj.authorization && (proofObj as any).payload) {
+      proofObj.authorization = (proofObj as any).payload;
     }
   } catch {
     return {
