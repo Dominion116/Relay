@@ -1,6 +1,14 @@
 import { handleGatewayRequest } from '../server/gatewayHandler';
 
 export default async function handler(req: any, res: any) {
+  // CORS Preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(204).end();
+  }
+
   const host = req.headers['host'] || 'relayx402.vercel.app';
   const protocol = req.headers['x-forwarded-proto'] || 'https';
   const origin = `${protocol}://${host}`;

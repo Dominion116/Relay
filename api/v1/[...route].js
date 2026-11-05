@@ -1184,10 +1184,21 @@ async function handleGatewayRequest(method, pathname, headers, rawBody, origin =
 
 // src/api-handlers/v1-route.ts
 async function handler(req, res) {
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-payment, X-PAYMENT");
+    return res.status(204).end();
+  }
   const host = req.headers["host"] || "relayx402.vercel.app";
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const origin = `${protocol}://${host}`;
-  const cleanPath = (req.url || "").split("?")[0];
+  let cleanPath = (req.url || "").split("?")[0];
+  const queryParts = req.query?.path || req.query?.route || req.query?.match;
+  if (queryParts) {
+    const routeParts = Array.isArray(queryParts) ? queryParts.join("/") : queryParts;
+    cleanPath = `/v1/${routeParts}`;
+  }
   const response = await handleGatewayRequest(
     req.method || "POST",
     cleanPath,
