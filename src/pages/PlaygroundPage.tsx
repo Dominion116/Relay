@@ -272,10 +272,10 @@ console.log(data);`;
           <div className="max-w-3xl mb-10">
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
               <span className="size-1.5 rounded-full bg-blue-500" />
-              <span>Live Simulation & Inspector</span>
+              <span>Live Execution & Inspector</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
-              Simulate x402 payments on Base
+              Execute x402 payments on Base
             </h1>
             <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
               Send raw requests to any endpoint. Watch the gateway return HTTP 402 Payment Required, sign the authentic EIP-712 transfer authorization, and receive the live verified payload.
