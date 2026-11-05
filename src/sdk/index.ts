@@ -1,1 +1,1 @@
-export * from './relayClient';
+export * from './relayClient.js';
