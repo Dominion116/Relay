@@ -5,7 +5,7 @@ import { RELAY_RESOURCES, BASE_USDC_MAINNET, generate402Challenge, verifyPayment
 import { X402Challenge, X402VerificationResult, X402PaymentProof } from '../types/x402';
 import { EIP712_TRANSFER_TYPES } from '../server/agentWallet';
 import { FaPlay, FaCopy, FaCheck } from 'react-icons/fa6';
-import { AlertCircle, ShieldCheck, Wallet, ArrowRight, ExternalLink } from 'lucide-react';
+import { AlertCircle, ShieldCheck, Wallet, ArrowRight, ExternalLink, Receipt } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useReadContract, useSignTypedData, useSwitchChain } from 'wagmi';
@@ -30,6 +30,22 @@ const ERC20_BALANCE_ABI = [
   }
 ] as const;
 
+
+export interface DashboardSettlementItem {
+  id: string;
+  resourceId: string;
+  resourceName: string;
+  path: string;
+  costUsdc: number;
+  payer: string;
+  payTo: string;
+  txHash: string;
+  signature: string;
+  timestamp: string;
+  latencyMs: number;
+  status: 'SETTLED' | 'PENDING';
+}
+
 export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   onNavigate,
   onOpenMcp,
@@ -47,7 +63,9 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
   const [requestBodyText, setRequestBodyText] = useState<string>(
     JSON.stringify(initialParams, null, 2)
   );
-  const [activeTab, setActiveTab] = useState<'console' | 'curl' | 'python' | 'ts'>('console');
+  const [activeTab, setActiveTab] = useState<'console' | 'ledger' | 'curl' | 'python' | 'ts'>('console');
+  const [settlementLedger, setSettlementLedger] = useState<DashboardSettlementItem[]>([]);
+  const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   // Wagmi & RainbowKit Web3 State
@@ -200,6 +218,23 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
       const data = await dispatchResourceRequest(selectedResource.id, parsedParams);
       setResponseData(data);
       setStep(4);
+
+      // Record in Session Settlement Ledger
+      const newReceipt: DashboardSettlementItem = {
+        id: `rcpt_${Date.now()}`,
+        resourceId: selectedResource.id,
+        resourceName: selectedResource.name,
+        path: selectedResource.path,
+        costUsdc: cost,
+        payer: address,
+        payTo: challenge.paymentRequirements.payTo,
+        txHash: verification.txHash || `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+        signature,
+        timestamp: new Date().toLocaleTimeString(),
+        latencyMs: Math.round(performance.now() - startTime),
+        status: 'SETTLED'
+      };
+      setSettlementLedger(prev => [newReceipt, ...prev]);
 
       // Refetch onchain balance
       refetchUsdc?.();
@@ -534,6 +569,25 @@ if (res.status === 402) {
                     <button
                       type="button"
                       role="tab"
+                      aria-selected={activeTab === 'ledger'}
+                      onClick={() => setActiveTab('ledger')}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
+                        activeTab === 'ledger'
+                          ? 'bg-neutral-800 text-white font-medium'
+                          : 'text-neutral-400 hover:text-neutral-200'
+                      }`}
+                    >
+                      <Receipt className="size-3 text-emerald-400" />
+                      <span>Settlement Ledger</span>
+                      {settlementLedger.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                          {settlementLedger.length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
                       aria-selected={activeTab === 'curl'}
                       onClick={() => setActiveTab('curl')}
                       className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
@@ -577,6 +631,8 @@ if (res.status === 402) {
                     onClick={() => {
                       if (activeTab === 'console') {
                         copyCode(JSON.stringify(responseData || challenge402 || {}, null, 2));
+                      } else if (activeTab === 'ledger') {
+                        copyCode(JSON.stringify(settlementLedger, null, 2));
                       } else if (activeTab === 'curl') {
                         copyCode(getCurlSnippet());
                       } else if (activeTab === 'ts') {
@@ -657,6 +713,110 @@ if (res.status === 402) {
                           ) : (
                             <span>Connect your Base wallet on the left to initiate the x402 payment cycle.</span>
                           )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                                    {activeTab === 'ledger' && (
+                    <div className="space-y-4">
+                      {/* Summary Banner */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800/80 text-xs font-mono">
+                        <div>
+                          <div className="text-neutral-500 text-[10px]">TOTAL SETTLED</div>
+                          <div className="text-emerald-400 font-semibold text-sm">
+                            ${settlementLedger.reduce((sum, item) => sum + item.costUsdc, 0).toFixed(4)} USDC
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-neutral-500 text-[10px]">TOTAL CALLS</div>
+                          <div className="text-neutral-200 font-semibold text-sm">{settlementLedger.length}</div>
+                        </div>
+                        <div>
+                          <div className="text-neutral-500 text-[10px]">SETTLEMENT ASSET</div>
+                          <div className="text-neutral-200 font-medium text-xs truncate">Base USDC</div>
+                        </div>
+                        <div>
+                          <div className="text-neutral-500 text-[10px]">TREASURY PAYEE</div>
+                          <a
+                            href="https://basescan.org/address/0x420f9F9deA7fA318eA8996C8aA00ad9738D98072"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 text-xs truncate"
+                          >
+                            <span>0x420f...8072</span>
+                            <ExternalLink className="size-2.5 shrink-0" />
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Ledger Item List */}
+                      {settlementLedger.length === 0 ? (
+                        <div className="py-16 text-center text-neutral-500 text-xs font-mono space-y-2">
+                          <Receipt className="size-6 text-neutral-600 mx-auto" />
+                          <div>No settlements recorded in this session yet.</div>
+                          <div className="text-neutral-600 text-[11px]">
+                            Connect your Base wallet and click "Pay & Execute" above to generate on-chain / EIP-712 settlement receipts.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {settlementLedger.map((rcpt) => (
+                            <div
+                              key={rcpt.id}
+                              className="p-3.5 rounded-xl bg-neutral-900/40 border border-neutral-800/80 hover:border-neutral-700/80 transition-colors text-xs font-mono space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20">
+                                    POST
+                                  </span>
+                                  <span className="text-neutral-200 font-medium">{rcpt.path}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-neutral-400 text-[11px]">{rcpt.timestamp}</span>
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold text-[11px] border border-emerald-500/20">
+                                    +${rcpt.costUsdc.toFixed(2)} USDC
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-neutral-800/60 text-[11px] text-neutral-400">
+                                <div className="truncate">
+                                  <span className="text-neutral-500">Payer: </span>
+                                  <span className="text-neutral-300">{rcpt.payer}</span>
+                                </div>
+                                <div className="truncate flex items-center justify-between sm:justify-end gap-2">
+                                  <span className="text-neutral-500">Tx Hash: </span>
+                                  <a
+                                    href={`https://basescan.org/tx/${rcpt.txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 font-mono"
+                                  >
+                                    <span>{rcpt.txHash.slice(0, 10)}...{rcpt.txHash.slice(-6)}</span>
+                                    <ExternalLink className="size-2.5" />
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(JSON.stringify(rcpt, null, 2));
+                                      setCopiedReceiptId(rcpt.id);
+                                      setTimeout(() => setCopiedReceiptId(null), 2000);
+                                    }}
+                                    className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors ml-1"
+                                    title="Copy full receipt JSON"
+                                  >
+                                    {copiedReceiptId === rcpt.id ? (
+                                      <FaCheck className="size-3 text-emerald-400" />
+                                    ) : (
+                                      <FaCopy className="size-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

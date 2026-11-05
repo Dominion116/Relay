@@ -440,10 +440,41 @@ export const DocsPage: React.FC<DocsPageProps> = ({
               {/* Section: TypeScript and Viem */}
               <section id="ts-sdk" className="space-y-4">
                 <h2 className="text-2xl font-medium text-neutral-100 tracking-tight">
-                  TypeScript and Viem integration
+                  Autonomous Agent SDK & TypeScript integration
                 </h2>
                 <p className="text-[14px] text-neutral-400">
-                  Using viem and node-fetch, you can handle the 402 challenge in less than thirty lines of code:
+                  Autonomous agents, LLM pipelines, and bot scripts can integrate with Relay via our high-level <code className="text-white">RelayClient</code> SDK or using standard low-level Viem wire signing:
+                </p>
+
+                {/* SDK 1-Liner Card */}
+                <div className="rounded-xl bg-neutral-950/90 border border-neutral-800/80 overflow-hidden mb-6">
+                  <div className="flex items-center justify-between px-4 py-2 bg-neutral-900/60 text-xs font-mono text-neutral-400">
+                    <span className="text-emerald-400 font-medium">RelayClient SDK (1-Line Autonomous Settlement)</span>
+                    <button
+                      onClick={() => copyToClipboard(`import { RelayClient } from '@relay/sdk';\n\nconst relay = new RelayClient({\n  privateKey: process.env.AGENT_PRIVATE_KEY as '0x...'\n});\n\n// Automatically negotiates 402, signs Base USDC transfer, and returns data\nconst { settlement, data } = await relay.crypto.price(['bitcoin', 'ethereum']);\nconsole.log('Settled on Base:', settlement.cost_usdc, settlement.tx_hash);\nconsole.log('Prices:', data.prices);`, 'sdk-snippet')}
+                      className="hover:text-white transition-colors flex items-center gap-1"
+                    >
+                      {copiedCode === 'sdk-snippet' ? <FaCheck className="size-2.5 text-emerald-400" /> : <FaCopy className="size-2.5" />}
+                      <span>{copiedCode === 'sdk-snippet' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-4 text-xs font-mono text-neutral-300 overflow-x-auto leading-relaxed">
+                    <code>{`import { RelayClient } from '@relay/sdk';
+
+const relay = new RelayClient({
+  privateKey: process.env.AGENT_PRIVATE_KEY as '0x...'
+});
+
+// Automatically negotiates 402 challenge, signs Base USDC transfer, and retrieves data
+const { settlement, data } = await relay.crypto.price(['bitcoin', 'ethereum']);
+console.log('Settled on Base:', settlement.cost_usdc, settlement.tx_hash);
+console.log('Prices:', data.prices);
+`}</code>
+                  </pre>
+                </div>
+
+                <p className="text-[14px] text-neutral-400">
+                  Or implement the raw ERC-3009 EIP-712 wire challenge flow directly with Viem:
                 </p>
                 <div className="rounded-xl bg-neutral-950/90 border border-neutral-800/80 overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-2 bg-neutral-900/60 text-xs font-mono text-neutral-400">

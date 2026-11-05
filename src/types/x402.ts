@@ -65,6 +65,12 @@ export interface X402VerificationResult {
   txHash?: string;
   settledAt?: string;
   error?: string;
+  onChainBroadcast?: {
+    attempted: boolean;
+    success: boolean;
+    txHash?: string;
+    error?: string;
+  };
 }
 
 export interface WellKnownX402Manifest {

@@ -41,6 +41,20 @@ export async function handleGatewayRequest(
     };
   }
 
+  // 1b. Live Gateway Health & Provider Telemetry (Free / Unchallenged)
+  if (cleanPath === '/health' || cleanPath === '/v1/health' || cleanPath === '/api/health' || cleanPath === '/api/v1/health' || cleanPath === '/.well-known/health') {
+    const healthData = await dispatchResourceRequest('health', {});
+    return {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache'
+      },
+      body: healthData
+    };
+  }
+
   // 2. Locate endpoint in registry
   const normalizedRoute = cleanPath.replace(/^\/api/, '');
   const resource = RELAY_RESOURCES.find(r => r.path === normalizedRoute || r.url === normalizedRoute);
