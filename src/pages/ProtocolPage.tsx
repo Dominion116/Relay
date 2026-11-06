@@ -3,6 +3,9 @@ import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
 import { FaCheck, FaCopy, FaArrowRight } from 'react-icons/fa6';
 import { ArrowUpRight } from 'lucide-react';
+import { RELAY_RESOURCES, PAYMENT_TIMEOUT_SECONDS } from '../shared/resources';
+import { paymentNetwork } from '../shared/paymentClient';
+import { getGatewayUrl, relayNetwork, relayTreasuryAddress } from '../config/wagmi';
 
 interface ProtocolPageProps {
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
@@ -17,10 +20,13 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
 }) => {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedSection(id);
-    setTimeout(() => setCopiedSection(null), 2000);
+  const [copyError, setCopyError] = useState('');
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedSection(id);
+      setCopyError('');
+    } catch { setCopyError('Clipboard access was denied. The examples remain available below.'); }
   };
 
   const eip712Schema = `{
@@ -48,29 +54,14 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
   }
 }`;
 
-  const manifestSchema = `{
-  "x402Version": 2,
-  "name": "Relay Base Gateway",
-  "network": "base",
-  "chainId": 8453,
-  "currency": "USDC",
-  "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  "facilitator": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-  "endpoints": [
-    {
-      "id": "crypto_price",
-      "path": "/api/v1/crypto/price",
-      "costUsdc": "0.01",
-      "settlement": "EIP-712 ERC-3009"
-    },
-    {
-      "id": "academic_works",
-      "path": "/api/v1/academic/works",
-      "costUsdc": "0.03",
-      "settlement": "EIP-712 ERC-3009"
-    }
-  ]
-}`;
+  const network = paymentNetwork(relayNetwork);
+  const resource = RELAY_RESOURCES.find(item => item.id === 'crypto_price')!;
+  const manifestSchema = JSON.stringify({
+    x402Version: 2,
+    resource: { url: `${getGatewayUrl()}${resource.path}`, description: resource.description, mimeType: 'application/json' },
+    accepts: [{ scheme: 'exact', network: network.network, asset: network.asset, amount: resource.amount,
+      payTo: relayTreasuryAddress, maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS, extra: { name: network.name, version: '2' } }],
+  }, null, 2);
 
   return (
     <div className="w-full bg-[#0a0a0a] text-neutral-400 font-sans antialiased min-h-screen flex flex-col justify-between">
@@ -88,7 +79,7 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
           {/* Page Hero */}
           <div className="max-w-4xl mb-14">
             <span className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-2 block font-medium">
-              Protocol Specification v2.1 • RFC x402 Base EVM
+              x402 v2 / HTTP transport / Base EVM
             </span>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
               The x402 Wire Protocol on Base
@@ -96,6 +87,8 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
             <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
               A standardized micropayment handshake reviving HTTP status 402 for autonomous AI agents. Built on Base EVM and ERC-3009 gasless authorization primitives.
             </p>
+            <p className="mt-3 text-xs text-amber-300">This specification describes the corrected repository. Deploy the new gateway before relying on these headers at a hosted URL.</p>
+            {copyError && <p role="status" className="mt-3 text-xs text-amber-300">{copyError}</p>}
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 onClick={() => onNavigate('playground')}
@@ -141,12 +134,12 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                   </div>
                   <h3 className="text-base font-medium text-neutral-100 mb-2">Unauthenticated request</h3>
                   <p className="text-sm text-neutral-400 leading-relaxed font-sans">
-                    Client sends a regular HTTP POST. No API key, session, or pre-funding is required.
+                    Client sends a JSON POST. No vendor subscription or API key is required; the signing wallet must hold USDC on the configured network.
                   </p>
                 </div>
                 <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
                   <span className="text-neutral-500 block mb-0.5">Wire invocation:</span>
-                  <code className="text-neutral-200">POST /api/v1/academic/works</code>
+                  <code className="text-neutral-200 break-all">POST /v1/academic/search</code>
                 </div>
               </div>
 
@@ -161,7 +154,7 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                   </div>
                   <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 402 challenge</h3>
                   <p className="text-sm text-neutral-400 leading-relaxed font-sans">
-                    Gateway yields 402 + payment metadata: USDC price, receiver address, Base chain ID, and nonce.
+                    Gateway returns 402 with PAYMENT-REQUIRED and a matching JSON body containing resource and exact payment accepts. The client validates the offer before signing.
                   </p>
                 </div>
                 <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
@@ -186,7 +179,7 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                 </div>
                 <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
                   <span className="text-neutral-500 block mb-0.5">Header proof:</span>
-                  <code className="text-blue-400">X-Payment-Proof: 0x...</code>
+                  <code className="text-blue-400 break-all">PAYMENT-SIGNATURE: base64(proof)</code>
                 </div>
               </div>
 
@@ -201,7 +194,7 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                   </div>
                   <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 200 payload</h3>
                   <p className="text-sm text-neutral-400 leading-relaxed font-sans">
-                    Gateway verifies cryptographic proof and returns authoritative live data in real-time.
+                    Gateway verifies the full authorization, retrieves provider data, and confirms settlement before returning data and PAYMENT-RESPONSE. Pending transactions do not produce paid data.
                   </p>
                 </div>
                 <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
@@ -214,7 +207,7 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
 
           {/* Schemas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16 pt-8">
-            <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 hover:border-neutral-700/80 transition-colors">
+            <div className="min-w-0 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 hover:border-neutral-700/80 transition-colors">
               <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800/80">
                 <div>
                   <span className="text-xs font-mono text-blue-400 block mb-0.5">Authorization schema</span>
@@ -230,18 +223,18 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                 </button>
               </div>
               <p className="text-sm text-neutral-400 mb-4 leading-relaxed font-sans">
-                Official Base USDC (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs font-mono">0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code>) supports off-chain gasless transfer authorization:
+                Mainnet example: official Base USDC (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs font-mono break-all">0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code>). On Base Sepolia, use chain 84532, the Sepolia USDC contract, and domain name USDC instead of USD Coin.
               </p>
-              <pre className="p-4 rounded-xl bg-black/70 text-neutral-300 font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800/80">
+              <pre tabIndex={0} className="p-4 rounded-xl bg-black/70 text-neutral-300 font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800/80">
                 <code>{eip712Schema}</code>
               </pre>
             </div>
 
-            <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 hover:border-neutral-700/80 transition-colors">
+            <div className="min-w-0 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 hover:border-neutral-700/80 transition-colors">
               <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800/80">
                 <div>
-                  <span className="text-xs font-mono text-neutral-400 block mb-0.5">Automated discovery</span>
-                  <h3 className="text-lg font-medium text-neutral-100">Machine Manifest (/.well-known/x402)</h3>
+                  <span className="text-xs font-mono text-neutral-400 block mb-0.5">Canonical offer example</span>
+                  <h3 className="text-lg font-medium text-neutral-100">PAYMENT-REQUIRED</h3>
                 </div>
                 <button
                   type="button"
@@ -253,9 +246,9 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                 </button>
               </div>
               <p className="text-sm text-neutral-400 mb-4 leading-relaxed font-sans">
-                Autonomous crawlers query the well-known discovery URI to index pricing, capabilities, and parameters:
+                The header is base64-encoded JSON with this shape. The signed retry contains x402Version, accepted, resource, and payload with both signature and authorization. Fetch the discovery manifest above for actual gateway offers.
               </p>
-              <pre className="p-4 rounded-xl bg-black/70 text-neutral-300 font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800/80">
+              <pre tabIndex={0} className="p-4 rounded-xl bg-black/70 text-neutral-300 font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800/80">
                 <code>{manifestSchema}</code>
               </pre>
             </div>
@@ -300,14 +293,14 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
                   <tr className="hover:bg-neutral-900/20 transition-colors">
                     <td className="py-3.5 px-4 font-medium text-neutral-200 font-mono">Tooling ecosystem</td>
                     <td className="py-3.5 px-4 text-neutral-400">Proprietary vendor SDKs & static tokens</td>
-                    <td className="py-3.5 px-4 text-blue-400 font-medium">Coinbase AgentKit, viem, ethers, CDP</td>
+                    <td className="py-3.5 px-4 text-blue-400 font-medium">Repository-local SDK, viem, stdio MCP</td>
                     <td className="py-3.5 px-4 text-neutral-300">Standard web3 and agent framework stack</td>
                   </tr>
                   <tr className="hover:bg-neutral-900/20 transition-colors">
                     <td className="py-3.5 px-4 font-medium text-neutral-200 font-mono">Machine interface</td>
                     <td className="py-3.5 px-4 text-neutral-400">Web dashboard only</td>
                     <td className="py-3.5 px-4 text-blue-400 font-medium">JSON Manifest + Model Context Protocol</td>
-                    <td className="py-3.5 px-4 text-neutral-300">Immediate plug-and-play in Cursor & Claude</td>
+                    <td className="py-3.5 px-4 text-neutral-300">Local Cursor / Claude configuration with explicit budgets</td>
                   </tr>
                 </tbody>
               </table>

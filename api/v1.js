@@ -1,578 +1,27 @@
-// src/server/providers.ts
-function getOpenAlexMailto() {
-  if (typeof process !== "undefined" && process.env?.OPENALEX_EMAIL) {
-    return `&mailto=${encodeURIComponent(process.env.OPENALEX_EMAIL)}`;
-  }
-  return "";
-}
-function getCoinGeckoHeaders() {
-  const headers = { Accept: "application/json" };
-  if (typeof process !== "undefined" && process.env?.COINGECKO_API_KEY) {
-    headers["x-cg-demo-api-key"] = process.env.COINGECKO_API_KEY;
-  }
-  return headers;
-}
-async function fetchAcademicSearch(query, limit = 5) {
-  const boundedLimit = Math.min(20, Math.max(1, limit));
-  try {
-    const res = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${boundedLimit}${getOpenAlexMailto()}`);
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        query,
-        provider: "OpenAlex",
-        total_results: data.meta?.count || 0,
-        results: (data.results || []).map((work) => ({
-          id: work.id,
-          doi: work.doi || `https://doi.org/${work.id.replace("https://openalex.org/", "")}`,
-          title: work.title || "Untitled Paper",
-          publication_year: work.publication_year || null,
-          authors: (work.authorships || []).map((a) => a.author?.display_name).filter(Boolean),
-          journal: work.primary_location?.source?.display_name || work.host_venue?.name || "N/A",
-          cited_by_count: work.cited_by_count || 0,
-          is_oa: work.open_access?.is_oa || false,
-          landing_page_url: work.primary_location?.landing_page_url || work.doi || work.id
-        })),
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch (err) {
-  }
-  const crossrefRes = await fetch(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${boundedLimit}`);
-  if (!crossrefRes.ok) {
-    throw new Error(`Academic search failed across OpenAlex and Crossref providers.`);
-  }
-  const crossrefData = await crossrefRes.json();
-  const items = crossrefData.message?.items || [];
-  return {
-    query,
-    provider: "Crossref (Live Fallback)",
-    total_results: crossrefData.message?.["total-results"] || items.length,
-    results: items.map((item) => ({
-      id: `https://doi.org/${item.DOI}`,
-      doi: item.DOI ? `https://doi.org/${item.DOI}` : "N/A",
-      title: Array.isArray(item.title) ? item.title[0] : item.title || "Untitled",
-      publication_year: item.issued?.["date-parts"]?.[0]?.[0] || null,
-      authors: (item.author || []).map((a) => `${a.given || ""} ${a.family || ""}`.trim()).filter(Boolean),
-      journal: Array.isArray(item["container-title"]) ? item["container-title"][0] : "Scholarly Publication",
-      cited_by_count: item["is-referenced-by-count"] || 0,
-      is_oa: Boolean(item.link?.length),
-      landing_page_url: item.URL || (item.DOI ? `https://doi.org/${item.DOI}` : null)
-    })),
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchAcademicWork(doi) {
-  const cleanDoi = doi.replace(/^https?:\/\/doi\.org\//, "").trim();
-  try {
-    const mailto = getOpenAlexMailto();
-    const querySuffix = mailto ? mailto.startsWith("&") ? "?" + mailto.slice(1) : mailto : "";
-    const res = await fetch(`https://api.openalex.org/works/https://doi.org/${encodeURIComponent(cleanDoi)}${querySuffix}`);
-    if (res.ok) {
-      const work = await res.json();
-      return {
-        doi: work.doi || `https://doi.org/${cleanDoi}`,
-        title: work.title,
-        publication_year: work.publication_year,
-        authors: (work.authorships || []).map((a) => a.author?.display_name).filter(Boolean),
-        journal: work.primary_location?.source?.display_name || "N/A",
-        cited_by_count: work.cited_by_count || 0,
-        is_oa: work.open_access?.is_oa || false,
-        landing_page_url: work.primary_location?.landing_page_url || work.doi,
-        provider: "OpenAlex",
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch (err) {
-  }
-  const crRes = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`);
-  if (!crRes.ok) {
-    throw new Error(`Academic work not found for DOI: ${cleanDoi}`);
-  }
-  const crData = await crRes.json();
-  const item = crData.message;
-  return {
-    doi: `https://doi.org/${cleanDoi}`,
-    title: Array.isArray(item.title) ? item.title[0] : item.title,
-    publication_year: item.issued?.["date-parts"]?.[0]?.[0] || null,
-    authors: (item.author || []).map((a) => `${a.given || ""} ${a.family || ""}`.trim()).filter(Boolean),
-    journal: Array.isArray(item["container-title"]) ? item["container-title"][0] : "N/A",
-    cited_by_count: item["is-referenced-by-count"] || 0,
-    is_oa: Boolean(item.link?.length),
-    landing_page_url: item.URL || `https://doi.org/${cleanDoi}`,
-    provider: "Crossref (Live Fallback)",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-var BINANCE_SYMBOL_MAP = {
-  btc: "BTCUSDT",
-  bitcoin: "BTCUSDT",
-  eth: "ETHUSDT",
-  ethereum: "ETHUSDT",
-  sol: "SOLUSDT",
-  solana: "SOLUSDT",
-  bnb: "BNBUSDT",
-  binancecoin: "BNBUSDT",
-  base: "AEROUSDT",
-  aero: "AEROUSDT",
-  aerodrome: "AEROUSDT",
-  doge: "DOGEUSDT",
-  dogecoin: "DOGEUSDT",
-  xrp: "XRPUSDT",
-  ripple: "XRPUSDT",
-  ada: "ADAUSDT",
-  cardano: "ADAUSDT",
-  avax: "AVAXUSDT",
-  avalanche: "AVAXUSDT",
-  link: "LINKUSDT",
-  chainlink: "LINKUSDT",
-  matic: "POLUSDT",
-  pol: "POLUSDT",
-  polygon: "POLUSDT",
-  near: "NEARUSDT",
-  arb: "ARBUSDT",
-  arbitrum: "ARBUSDT",
-  op: "OPUSDT",
-  optimism: "OPUSDT"
-};
-async function fetchBinanceTicker(symbol) {
-  const endpoints = [
-    `https://data-api.binance.vision/api/v3/ticker/24hr?symbol=${symbol}`,
-    `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-    }
-  }
-  return null;
-}
-async function fetchCryptoPrice(assets = ["ethereum", "bitcoin"], vsCurrency = "usd") {
-  try {
-    const prices = await Promise.all(
-      assets.map(async (asset) => {
-        const clean = asset.toLowerCase().trim();
-        const sym = BINANCE_SYMBOL_MAP[clean] || (clean.toUpperCase().endsWith("USDT") ? clean.toUpperCase() : `${clean.toUpperCase()}USDT`);
-        const bData = await fetchBinanceTicker(sym);
-        if (bData) {
-          return {
-            asset,
-            symbol: sym.replace("USDT", ""),
-            price: parseFloat(bData.lastPrice),
-            change_24h_percent: parseFloat(bData.priceChangePercent),
-            high_24h: parseFloat(bData.highPrice),
-            low_24h: parseFloat(bData.lowPrice),
-            volume_24h: parseFloat(bData.volume),
-            quote_volume_24h: parseFloat(bData.quoteVolume)
-          };
-        }
-        return null;
-      })
-    );
-    const validPrices = prices.filter(Boolean);
-    if (validPrices.length > 0) {
-      return {
-        quote_currency: vsCurrency.toUpperCase(),
-        prices: validPrices,
-        source: "Binance Live Market Data",
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch {
-  }
-  try {
-    const assetString = assets.join(",");
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(assetString)}&vs_currencies=${encodeURIComponent(vsCurrency)}&include_24hr_change=true`;
-    const res = await fetch(url, { headers: getCoinGeckoHeaders() });
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        quote_currency: vsCurrency.toUpperCase(),
-        prices: Object.entries(data).map(([id, info]) => ({
-          asset: id,
-          symbol: id.toUpperCase(),
-          price: info[vsCurrency.toLowerCase()],
-          change_24h_percent: Number((info[`${vsCurrency.toLowerCase()}_24h_change`] || 0).toFixed(2))
-        })),
-        source: "CoinGecko (Fallback)",
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch {
-  }
-  throw new Error(`Unable to fetch real-time crypto prices across Binance and CoinGecko.`);
-}
-async function fetchCryptoMarket(assets = ["ethereum", "bitcoin"]) {
-  try {
-    const results = await Promise.all(
-      assets.map(async (asset, idx) => {
-        const clean = asset.toLowerCase().trim();
-        const sym = BINANCE_SYMBOL_MAP[clean] || (clean.toUpperCase().endsWith("USDT") ? clean.toUpperCase() : `${clean.toUpperCase()}USDT`);
-        const d = await fetchBinanceTicker(sym);
-        if (d) {
-          const price = parseFloat(d.lastPrice);
-          const volume = parseFloat(d.quoteVolume);
-          return {
-            id: asset,
-            symbol: sym.replace("USDT", ""),
-            name: asset.toUpperCase(),
-            current_price: price,
-            change_24h_percent: parseFloat(d.priceChangePercent),
-            total_volume_24h: volume,
-            high_24h: parseFloat(d.highPrice),
-            low_24h: parseFloat(d.lowPrice),
-            market_cap_rank: idx + 1,
-            ath: parseFloat(d.highPrice)
-          };
-        }
-        return null;
-      })
-    );
-    const filtered = results.filter(Boolean);
-    if (filtered.length > 0) {
-      return {
-        market_data: filtered,
-        source: "Binance Live Market Data",
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch {
-  }
-  try {
-    const assetString = assets.join(",");
-    const res = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(assetString)}`, { headers: getCoinGeckoHeaders() });
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        market_data: data.map((coin) => ({
-          id: coin.id,
-          symbol: coin.symbol?.toUpperCase(),
-          name: coin.name,
-          current_price: coin.current_price,
-          market_cap: coin.market_cap,
-          market_cap_rank: coin.market_cap_rank,
-          total_volume_24h: coin.total_volume,
-          circulating_supply: coin.circulating_supply,
-          total_supply: coin.total_supply,
-          ath: coin.ath
-        })),
-        source: "CoinGecko (Fallback)",
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch {
-  }
-  throw new Error("Unable to retrieve crypto market data from live providers.");
-}
-async function fetchFxRates(baseCurrency = "USD", targets = ["EUR", "GBP", "JPY", "CAD"]) {
-  const symbols = targets.join(",");
-  const res = await fetch(`https://api.frankfurter.app/latest?from=${baseCurrency.toUpperCase()}&to=${symbols}`);
-  if (!res.ok) {
-    throw new Error(`Frankfurter FX error: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return {
-    base: data.base,
-    date: data.date,
-    rates: data.rates,
-    source: "European Central Bank (Frankfurter)",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchWeather(latitude = 37.7749, longitude = -122.4194) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Open-Meteo weather API error: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return {
-    latitude: data.latitude,
-    longitude: data.longitude,
-    timezone: data.timezone,
-    elevation_m: data.elevation,
-    current: {
-      temperature_c: data.current.temperature_2m,
-      humidity_percent: data.current.relative_humidity_2m,
-      wind_speed_kmh: data.current.wind_speed_10m,
-      weather_code: data.current.weather_code
-    },
-    forecast_daily: (data.daily.time || []).slice(0, 3).map((date, i) => ({
-      date,
-      max_temp_c: data.daily.temperature_2m_max[i],
-      min_temp_c: data.daily.temperature_2m_min[i],
-      weather_code: data.daily.weather_code[i]
-    })),
-    source: "Open-Meteo",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchGeocode(query) {
-  try {
-    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=3`);
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        query,
-        features: (data.features || []).map((f) => ({
-          name: f.properties.name,
-          country: f.properties.country,
-          city: f.properties.city || f.properties.name,
-          state: f.properties.state,
-          coordinates: {
-            latitude: f.geometry.coordinates[1],
-            longitude: f.geometry.coordinates[0]
-          },
-          osm_type: f.properties.osm_type
-        })),
-        source: "Photon / OpenStreetMap",
-        retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-  } catch {
-  }
-  const nomRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=3`, {
-    headers: { "User-Agent": "Relay-x402-Gateway/1.0" }
-  });
-  if (!nomRes.ok) {
-    throw new Error(`Geocoding error for query: "${query}"`);
-  }
-  const nomData = await nomRes.json();
-  return {
-    query,
-    features: nomData.map((item) => ({
-      name: item.display_name.split(",")[0],
-      country: item.display_name.split(",").slice(-1)[0]?.trim(),
-      city: item.display_name.split(",")[0]?.trim(),
-      state: null,
-      coordinates: {
-        latitude: parseFloat(item.lat),
-        longitude: parseFloat(item.lon)
-      },
-      osm_type: item.type
-    })),
-    source: "Nominatim / OpenStreetMap (Live Fallback)",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchHolidays(countryCode = "US", year = 2026) {
-  const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode.toUpperCase()}`);
-  if (!res.ok) {
-    throw new Error(`Nager.Date holiday API error: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return {
-    country_code: countryCode.toUpperCase(),
-    year,
-    holidays: (data || []).slice(0, 15).map((h) => ({
-      date: h.date,
-      local_name: h.localName,
-      name: h.name,
-      global: h.global,
-      types: h.types
-    })),
-    source: "Nager.Date",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchKnowledgeSearch(query) {
-  const res = await fetch(`https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(query)}&language=en&format=json&origin=*&limit=5`);
-  if (!res.ok) {
-    throw new Error(`Wikidata API error: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return {
-    query,
-    entities: (data.search || []).map((e) => ({
-      id: e.id,
-      label: e.label,
-      description: e.description || "No description provided",
-      concept_uri: e.concepturi || `http://www.wikidata.org/entity/${e.id}`,
-      url: e.url ? e.url.startsWith("http") ? e.url : `https:${e.url}` : `https://www.wikidata.org/wiki/${e.id}`
-    })),
-    source: "Wikidata",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchNewsSearch(query) {
-  try {
-    const res = await fetch(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=5`);
-    if (res.ok) {
-      const data = await res.json();
-      const hits = data.hits || [];
-      if (hits.length > 0) {
-        return {
-          query,
-          total_articles: hits.length,
-          articles: hits.map((hit) => ({
-            title: hit.title,
-            source: hit.url ? new URL(hit.url).hostname.replace("www.", "") : "news.ycombinator.com",
-            url: hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
-            published_at: hit.created_at,
-            points: hit.points || 0,
-            num_comments: hit.num_comments || 0,
-            summary: `Reported by ${hit.author} with ${hit.points || 0} upvotes and ${hit.num_comments || 0} discussion points.`
-          })),
-          source: "Hacker News Algolia Real-Time Index",
-          retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-        };
-      }
-    }
-  } catch {
-  }
-  const wikiRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json&origin=*&srlimit=5`);
-  if (!wikiRes.ok) {
-    throw new Error(`Live news search failed across Algolia and Wikipedia providers.`);
-  }
-  const wikiData = await wikiRes.json();
-  const searchResults = wikiData.query?.search || [];
-  return {
-    query,
-    total_articles: searchResults.length,
-    articles: searchResults.map((item) => ({
-      title: item.title,
-      source: "wikipedia.org",
-      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title)}`,
-      published_at: item.timestamp,
-      summary: item.snippet.replace(/<[^>]*>?/gm, "")
-    })),
-    source: "Wikipedia Live Knowledge Index",
-    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function fetchResearchPack(topic) {
-  const [academic, knowledge, news] = await Promise.all([
-    fetchAcademicSearch(topic, 3),
-    fetchKnowledgeSearch(topic),
-    fetchNewsSearch(topic)
-  ]);
-  return {
-    topic,
-    provenance: {
-      generated_by: "Relay Deterministic Multi-Source Aggregator",
-      is_synthetic_mock: false,
-      settlement_network: "Base L2",
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    },
-    evidence: {
-      scholarly_citations: academic.results,
-      wikidata_entities: knowledge.entities,
-      recent_news_and_events: news.articles
-    },
-    deterministic_summary: `Topic "${topic}" verified live across ${academic.results.length} scholarly citations, ${knowledge.entities.length} canonical knowledge base entities, and ${news.articles.length} real-time news sources.`
-  };
-}
-async function fetchVerifyClaim(claim) {
-  const lower = claim.toLowerCase();
-  const negationCues = ["not", "never", "fake", "false", "refuses", "cannot", "untrue", "denies", "debunked"];
-  const hasNegation = negationCues.some((cue) => lower.includes(` ${cue} `) || lower.startsWith(`${cue} `));
-  const keywords = lower.replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter((w) => w.length > 3 && !["this", "that", "with", "from", "have", "were", "been", "which"].includes(w));
-  const searchQuery = keywords.slice(0, 3).join(" ") || claim;
-  const [wikiCheck, academicCheck] = await Promise.allSettled([
-    fetchKnowledgeSearch(searchQuery),
-    fetchAcademicSearch(searchQuery, 2)
-  ]);
-  const wikiHits = wikiCheck.status === "fulfilled" ? wikiCheck.value.entities.length : 0;
-  const academicHits = academicCheck.status === "fulfilled" ? academicCheck.value.results.length : 0;
-  let verdict = "SUPPORTED";
-  let confidence = 0.75;
-  if (hasNegation) {
-    verdict = "MIXED";
-    confidence = 0.65;
-  } else if (wikiHits === 0 && academicHits === 0) {
-    verdict = "INSUFFICIENT";
-    confidence = 0.4;
-  } else {
-    confidence = Math.min(0.96, 0.75 + wikiHits * 0.04 + academicHits * 0.05);
-  }
-  return {
-    claim,
-    verdict,
-    heuristic_metrics: {
-      confidence: Number(confidence.toFixed(2)),
-      lexical_terms_extracted: keywords,
-      negation_cue_detected: hasNegation,
-      live_sources_consulted: ["Wikidata", "OpenAlex"],
-      live_evidence_count: wikiHits + academicHits
-    },
-    evidence_trail: [
-      {
-        provider: "Wikidata Entity Search",
-        matches_found: wikiHits,
-        status: wikiHits > 0 ? "Corroborated" : "No direct entity hit"
-      },
-      {
-        provider: "OpenAlex Scholarly Index",
-        matches_found: academicHits,
-        status: academicHits > 0 ? "Literature Match" : "No direct paper hit"
-      }
-    ],
-    verified_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function getProvidersHealth() {
-  const checks = {};
-  const t0 = performance.now();
-  try {
-    const res = await fetch("https://data-api.binance.vision/api/v3/ping");
-    checks.binance = { status: res.ok ? "healthy" : "degraded", latencyMs: Math.round(performance.now() - t0) };
-  } catch {
-    checks.binance = { status: "degraded", latencyMs: Math.round(performance.now() - t0) };
-  }
-  const t1 = performance.now();
-  try {
-    const res = await fetch("https://api.openalex.org");
-    checks.openAlex = { status: res.ok ? "healthy" : "degraded", latencyMs: Math.round(performance.now() - t1) };
-  } catch {
-    checks.openAlex = { status: "degraded", latencyMs: Math.round(performance.now() - t1) };
-  }
-  const t2 = performance.now();
-  try {
-    const res = await fetch("https://api.frankfurter.app/latest?symbols=EUR");
-    checks.frankfurter = { status: res.ok ? "healthy" : "degraded", latencyMs: Math.round(performance.now() - t2) };
-  } catch {
-    checks.frankfurter = { status: "degraded", latencyMs: Math.round(performance.now() - t2) };
-  }
-  return {
-    status: "operational",
-    gateway: "Relay x402 Gateway",
-    network: "Base Mainnet (8453)",
-    treasury: "0x420f9F9deA7fA318eA8996C8aA00ad9738D98072",
-    uptime: "99.98%",
-    providers: checks,
-    checkedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-
 // src/server/x402Engine.ts
-import { recoverTypedDataAddress, getAddress as getAddress2, parseSignature as parseSignature2, createWalletClient as createWalletClient2, http } from "viem";
-import { privateKeyToAccount as privateKeyToAccount2 } from "viem/accounts";
-import { base as base2 } from "viem/chains";
-
-// src/server/agentWallet.ts
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { createWalletClient, custom, parseSignature, getAddress } from "viem";
+import { randomBytes } from "node:crypto";
+import { PaymentPayloadV2Schema, PaymentRequirementsV2Schema, z } from "@x402/core/schemas";
+import { ExactEvmScheme } from "@x402/evm/exact/facilitator";
+import { eip3009ABI } from "@x402/evm";
+import {
+  createPublicClient,
+  createWalletClient,
+  encodeFunctionData,
+  getAddress as getAddress2,
+  http,
+  keccak256,
+  parseAbi,
+  parseEventLogs
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
-var EIP712_TRANSFER_TYPES = {
-  TransferWithAuthorization: [
-    { name: "from", type: "address" },
-    { name: "to", type: "address" },
-    { name: "value", type: "uint256" },
-    { name: "validAfter", type: "uint256" },
-    { name: "validBefore", type: "uint256" },
-    { name: "nonce", type: "bytes32" }
-  ]
-};
 
-// src/server/x402Engine.ts
-var BASE_USDC_MAINNET = getAddress2("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
-var BASE_USDC_SEPOLIA = getAddress2("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
-var envTreasury = typeof process !== "undefined" && process.env?.RELAY_TREASURY_ADDRESS ? process.env.RELAY_TREASURY_ADDRESS : "0x420f9F9deA7fA318eA8996C8aA00ad9738D98072";
-var DEFAULT_TREASURY_ADDRESS = getAddress2(envTreasury);
+// src/shared/resources.ts
+import { getAddress } from "viem";
+var BASE_USDC_MAINNET = getAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+var BASE_USDC_SEPOLIA = getAddress("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
+var DEFAULT_TREASURY_ADDRESS = getAddress("0x420f9F9deA7fA318eA8996C8aA00ad9738D98072");
+var PAYMENT_TIMEOUT_SECONDS = 300;
 var RELAY_RESOURCES = [
   {
     id: "academic_search",
@@ -587,7 +36,6 @@ var RELAY_RESOURCES = [
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "80000",
-    // 0.08 USDC
     priceUsdc: 0.08,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { query: "cryptographic payment channel layer 2", limit: 3 },
@@ -596,11 +44,7 @@ var RELAY_RESOURCES = [
         query: { type: "string", required: true, description: "Keywords or academic subject" },
         limit: { type: "number", required: false, description: "Number of works (1-20)" }
       },
-      responseSample: {
-        query: "cryptographic payment channel layer 2",
-        total_results: 142,
-        results: [{ title: "Off-chain Scalability and x402 Micropayments", doi: "10.1145/3543507" }]
-      }
+      responseSample: { query: "cryptographic payment channel layer 2", total_results: 142, results: [{ title: "Example scholarly work", doi: null }] }
     }
   },
   {
@@ -616,19 +60,12 @@ var RELAY_RESOURCES = [
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "60000",
-    // 0.06 USDC
     priceUsdc: 0.06,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { doi: "10.1038/s41586-020-2649-2" },
     schema: {
-      request: {
-        doi: { type: "string", required: true, description: "Digital Object Identifier" }
-      },
-      responseSample: {
-        doi: "https://doi.org/10.1038/s41586-020-2649-2",
-        title: "An ultra-scalable consensus protocol",
-        cited_by_count: 320
-      }
+      request: { doi: { type: "string", required: true, description: "Digital Object Identifier" } },
+      responseSample: { doi: "https://doi.org/10.1038/s41586-020-2649-2", title: "Example scholarly work", cited_by_count: 320 }
     }
   },
   {
@@ -638,13 +75,12 @@ var RELAY_RESOURCES = [
     url: "/v1/crypto/price",
     path: "/v1/crypto/price",
     method: "POST",
-    description: "Real-time spot price and 24-hour percentage change for cryptocurrency assets via CoinGecko.",
+    description: "Spot prices and 24-hour percentage changes via CoinGecko in the requested quote currency.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "40000",
-    // 0.04 USDC
     priceUsdc: 0.04,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { assets: ["ethereum", "bitcoin"], vsCurrency: "usd" },
@@ -653,10 +89,7 @@ var RELAY_RESOURCES = [
         assets: { type: "array of string", required: true, description: 'CoinGecko IDs (e.g. ["ethereum", "bitcoin"])' },
         vsCurrency: { type: "string", required: false, description: 'Quote currency (default: "usd")' }
       },
-      responseSample: {
-        quote_currency: "USD",
-        prices: [{ asset: "ethereum", price: 2620.45, change_24h_percent: 2.1 }]
-      }
+      responseSample: { quote_currency: "USD", prices: [{ asset: "ethereum", price: 2620.45, change_24h_percent: 2.1 }] }
     }
   },
   {
@@ -666,23 +99,18 @@ var RELAY_RESOURCES = [
     url: "/v1/crypto/market",
     path: "/v1/crypto/market",
     method: "POST",
-    description: "Market capitalization, rank, 24h trading volume, and circulating supply.",
+    description: "CoinGecko USD market capitalization, rank, 24h trading volume, circulating supply, and all-time high.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "60000",
-    // 0.06 USDC
     priceUsdc: 0.06,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { assets: ["ethereum", "bitcoin"] },
     schema: {
-      request: {
-        assets: { type: "array of string", required: true, description: "Asset identifiers" }
-      },
-      responseSample: {
-        market_data: [{ symbol: "ETH", current_price: 2620.45, market_cap: 315e9 }]
-      }
+      request: { assets: { type: "array of string", required: true, description: "CoinGecko asset identifiers" } },
+      responseSample: { market_data: [{ symbol: "ETH", current_price: 2620.45, market_cap: 315e9 }] }
     }
   },
   {
@@ -692,13 +120,12 @@ var RELAY_RESOURCES = [
     url: "/v1/fx/rates",
     path: "/v1/fx/rates",
     method: "POST",
-    description: "Official European Central Bank (ECB) reference exchange rates for international fiat currencies.",
+    description: "European Central Bank reference exchange rates via Frankfurter for supported fiat currencies.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "40000",
-    // 0.04 USDC
     priceUsdc: 0.04,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { baseCurrency: "USD", targets: ["EUR", "GBP", "JPY", "CAD"] },
@@ -707,10 +134,7 @@ var RELAY_RESOURCES = [
         baseCurrency: { type: "string", required: false, description: "Base 3-letter currency code (default: USD)" },
         targets: { type: "array of string", required: false, description: "List of target currency codes" }
       },
-      responseSample: {
-        base: "USD",
-        rates: { EUR: 0.92, GBP: 0.77, JPY: 152.4 }
-      }
+      responseSample: { base: "USD", rates: { EUR: 0.92, GBP: 0.77, JPY: 152.4 } }
     }
   },
   {
@@ -720,13 +144,12 @@ var RELAY_RESOURCES = [
     url: "/v1/weather",
     path: "/v1/weather",
     method: "POST",
-    description: "Current meteorological conditions and 3-day forecast for any coordinates via Open-Meteo.",
+    description: "Current conditions and a 3-day forecast for supplied coordinates via Open-Meteo.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "50000",
-    // 0.05 USDC
     priceUsdc: 0.05,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { latitude: 37.7749, longitude: -122.4194 },
@@ -735,36 +158,28 @@ var RELAY_RESOURCES = [
         latitude: { type: "number", required: true, description: "Latitude coordinate" },
         longitude: { type: "number", required: true, description: "Longitude coordinate" }
       },
-      responseSample: {
-        current: { temperature_c: 18.5, humidity_percent: 62 },
-        forecast_daily: [{ date: "2026-10-31", max_temp_c: 21 }]
-      }
+      responseSample: { current: { temperature_c: 18.5, humidity_percent: 62 }, forecast_daily: [{ max_temp_c: 21 }] }
     }
   },
   {
     id: "geocode",
-    name: "Geocoding & Reverse Lookup",
+    name: "Forward Geocoding",
     category: "geo",
     url: "/v1/geocode",
     path: "/v1/geocode",
     method: "POST",
-    description: "Forward place-name geocoding to GPS coordinates and administrative boundaries via Photon / OSM.",
+    description: "Forward place-name geocoding to coordinates and administrative boundaries via Photon / OSM.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "40000",
-    // 0.04 USDC
     priceUsdc: 0.04,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { query: "Coinbase Headquarters San Francisco" },
     schema: {
-      request: {
-        query: { type: "string", required: true, description: "Location, city, address or landmark" }
-      },
-      responseSample: {
-        features: [{ name: "San Francisco", country: "United States", coordinates: { latitude: 37.7749, longitude: -122.4194 } }]
-      }
+      request: { query: { type: "string", required: true, description: "Location, city, address or landmark" } },
+      responseSample: { features: [{ name: "San Francisco", country: "United States", coordinates: { latitude: 37.7749, longitude: -122.4194 } }] }
     }
   },
   {
@@ -774,25 +189,21 @@ var RELAY_RESOURCES = [
     url: "/v1/holidays",
     path: "/v1/holidays",
     method: "POST",
-    description: "Official national and regional public holiday schedules and observance dates via Nager.Date.",
+    description: "National and regional public holiday schedules and observance dates via Nager.Date.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "40000",
-    // 0.04 USDC
     priceUsdc: 0.04,
     payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { countryCode: "US", year: 2026 },
+    defaultParams: { countryCode: "US", year: (/* @__PURE__ */ new Date()).getUTCFullYear() },
     schema: {
       request: {
         countryCode: { type: "string", required: true, description: "ISO 2-letter country code" },
-        year: { type: "number", required: false, description: "Year (default: 2026)" }
+        year: { type: "number", required: false, description: "Year (default: current UTC year)" }
       },
-      responseSample: {
-        country_code: "US",
-        holidays: [{ date: "2026-07-04", name: "Independence Day", global: true }]
-      }
+      responseSample: { country_code: "US", holidays: [{ date: "2026-07-04", name: "Independence Day", global: true }] }
     }
   },
   {
@@ -802,598 +213,1203 @@ var RELAY_RESOURCES = [
     url: "/v1/knowledge/search",
     path: "/v1/knowledge/search",
     method: "POST",
-    description: "Search structured Wikidata knowledge graph for canonical entities, Q-identifiers, and descriptions.",
+    description: "Search Wikidata for entity identifiers, labels, and descriptions.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "60000",
-    // 0.06 USDC
     priceUsdc: 0.06,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { query: "Base layer 2 network" },
     schema: {
-      request: {
-        query: { type: "string", required: true, description: "Search term or entity name" }
-      },
-      responseSample: {
-        entities: [{ id: "Q117188880", label: "Base", description: "Ethereum Layer 2 network developed by Coinbase" }]
-      }
+      request: { query: { type: "string", required: true, description: "Search term or entity name" } },
+      responseSample: { entities: [{ id: "Q117188880", label: "Base", description: "Ethereum Layer 2 network developed by Coinbase" }] }
     }
   },
   {
     id: "news_search",
-    name: "Real-Time News Coverage",
+    name: "Recent Hacker News Submissions",
     category: "news",
     url: "/v1/news/search",
     path: "/v1/news/search",
     method: "POST",
-    description: "Live global news coverage and domain analysis with normalized publishing dates and sources.",
+    description: "Search Hacker News submissions from the last 30 days via Algolia. Dates describe submissions, not original article publication.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "80000",
-    // 0.08 USDC
     priceUsdc: 0.08,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { query: "Base network layer 2" },
     schema: {
-      request: {
-        query: { type: "string", required: true, description: "Topic or keyword to monitor" }
-      },
-      responseSample: {
-        query: "Base network layer 2",
-        articles: [{ title: "Autonomous Agents Transacting on Base", source: "Decrypt" }]
-      }
+      request: { query: { type: "string", required: true, description: "Topic or keyword to monitor" } },
+      responseSample: { query: "Base network layer 2", articles: [] }
     }
   },
   {
     id: "research",
-    name: "Deterministic Research Pack",
+    name: "Research Evidence Pack",
     category: "research",
     url: "/v1/research",
     path: "/v1/research",
     method: "POST",
-    description: "Synthesizes multi-domain evidence (Academic + Wikidata + News) with full source provenance; no LLM hallucination.",
+    description: "Retrieve academic works, Wikidata entities, and recent Hacker News submissions with source provenance; results are not independently verified.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "100000",
-    // 0.10 USDC
     priceUsdc: 0.1,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { topic: "zero knowledge rollups and micropayments" },
     schema: {
-      request: {
-        topic: { type: "string", required: true, description: "Research subject or question" }
-      },
-      responseSample: {
-        provenance: { is_llm_hallucination: false, settlement_network: "Base" },
-        evidence: { scholarly_citations: [], wikidata_entities: [], recent_news: [] }
-      }
+      request: { topic: { type: "string", required: true, description: "Research subject or question" } },
+      responseSample: { evidence: { scholarly_citations: [], wikidata_entities: [], recent_news: [] } }
     }
   },
   {
     id: "verify",
-    name: "Deterministic Claim Verification",
+    name: "Claim Evidence Retrieval",
     category: "research",
     url: "/v1/verify",
     path: "/v1/verify",
     method: "POST",
-    description: "Verify claims against cross-referenced databases returning an explainable verdict (SUPPORTED, CONTRADICTED, MIXED).",
+    description: "Retrieve related evidence for a claim. Search relevance alone cannot establish truth; the verdict is INSUFFICIENT pending independent assessment.",
     network: "base",
     chainId: 8453,
     asset: BASE_USDC_MAINNET,
     assetSymbol: "USDC",
     amount: "120000",
-    // 0.12 USDC
     priceUsdc: 0.12,
     payTo: DEFAULT_TREASURY_ADDRESS,
     defaultParams: { claim: "Base is an Ethereum Layer 2 rollup developed by Coinbase" },
     schema: {
-      request: {
-        claim: { type: "string", required: true, description: "Assertion or factual statement to verify" }
-      },
-      responseSample: {
-        verdict: "SUPPORTED",
-        heuristic_metrics: { confidence: 0.95, negation_cue_detected: false }
-      }
+      request: { claim: { type: "string", required: true, description: "Assertion or factual statement to investigate" } },
+      responseSample: { verdict: "INSUFFICIENT", heuristic_metrics: { confidence: null } }
     }
   }
 ];
-function generate402Challenge(resource, network = "base") {
-  const nonce = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-  const validBefore = Math.floor(Date.now() / 1e3) + 3600;
+
+// src/server/providers.ts
+var PROVIDER_TIMEOUT_MS = 5e3;
+var HEALTH_TIMEOUT_MS = 2500;
+var HEALTH_CACHE_MS = 6e4;
+var MAX_ITEMS = 10;
+var NEWS_WINDOW_MS = 30 * 24 * 60 * 60 * 1e3;
+function queryUrl(base2, params) {
+  const url = new URL(base2);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== void 0) url.searchParams.set(key, String(value));
+  }
+  return url.toString();
+}
+async function fetchJson(url, init = {}, timeoutMs = PROVIDER_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const host = new URL(url).hostname;
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${host} timed out after ${timeoutMs}ms`));
+      controller.abort();
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+        if (!response.ok) throw new Error(`${host} returned HTTP ${response.status}`);
+        return await response.json();
+      })(),
+      deadline
+    ]);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+function boundedText(value, name, maxLength = 1024) {
+  if (typeof value !== "string" || !value.trim() || value.length > maxLength) {
+    throw new Error(`${name} must be a non-empty string of at most ${maxLength} characters`);
+  }
+  return value.trim();
+}
+function boundedStrings(values, name) {
+  if (!Array.isArray(values) || values.length < 1 || values.length > MAX_ITEMS) {
+    throw new Error(`${name} must contain 1-${MAX_ITEMS} items`);
+  }
+  return Array.from(values, (value) => boundedText(value, name, 64));
+}
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function getOpenAlexMailto() {
+  return typeof process !== "undefined" ? process.env?.OPENALEX_EMAIL : void 0;
+}
+function getCoinGeckoHeaders() {
+  const headers = { Accept: "application/json" };
+  if (typeof process !== "undefined" && process.env?.COINGECKO_API_KEY) {
+    headers["x-cg-demo-api-key"] = process.env.COINGECKO_API_KEY;
+  }
+  return headers;
+}
+function openAlexWork(work) {
+  return {
+    id: work.id ?? null,
+    doi: work.doi || null,
+    title: work.title || "Untitled Paper",
+    publication_year: work.publication_year ?? null,
+    authors: (work.authorships || []).map((a) => a.author?.display_name).filter(Boolean),
+    journal: work.primary_location?.source?.display_name || work.host_venue?.name || "N/A",
+    cited_by_count: numberOrNull(work.cited_by_count),
+    is_oa: typeof work.open_access?.is_oa === "boolean" ? work.open_access.is_oa : null,
+    landing_page_url: work.primary_location?.landing_page_url || work.doi || work.id || null
+  };
+}
+function crossrefWork(item) {
+  const doi = item.DOI ? `https://doi.org/${item.DOI}` : null;
+  return {
+    id: doi || item.URL || null,
+    doi,
+    title: (Array.isArray(item.title) ? item.title[0] : item.title) || "Untitled Paper",
+    publication_year: item.issued?.["date-parts"]?.[0]?.[0] ?? null,
+    authors: (item.author || []).map((a) => `${a.given || ""} ${a.family || ""}`.trim()).filter(Boolean),
+    journal: (Array.isArray(item["container-title"]) ? item["container-title"][0] : item["container-title"]) || "N/A",
+    cited_by_count: numberOrNull(item["is-referenced-by-count"]),
+    // Crossref links can be paywalled or text-mining links, not evidence of open access.
+    is_oa: null,
+    landing_page_url: item.URL || doi
+  };
+}
+async function fetchAcademicSearch(query, limit = 5) {
+  query = boundedText(query, "query");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+    throw new Error("limit must be an integer from 1 to 20");
+  }
+  try {
+    const data2 = await fetchJson(queryUrl("https://api.openalex.org/works", {
+      search: query,
+      "per-page": limit,
+      mailto: getOpenAlexMailto()
+    }));
+    if (!Array.isArray(data2.results)) throw new Error("Invalid OpenAlex search response");
+    return {
+      query,
+      provider: "OpenAlex",
+      total_results: data2.meta?.count ?? data2.results.length,
+      results: data2.results.slice(0, limit).map(openAlexWork),
+      retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  } catch {
+  }
+  const data = await fetchJson(queryUrl("https://api.crossref.org/works", { query, rows: limit }));
+  if (!Array.isArray(data.message?.items)) throw new Error("Invalid Crossref search response");
+  return {
+    query,
+    provider: "Crossref (Live Fallback)",
+    total_results: data.message["total-results"] ?? data.message.items.length,
+    results: data.message.items.slice(0, limit).map(crossrefWork),
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchAcademicWork(doi) {
+  const cleanDoi = boundedText(doi, "doi", 2048).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "");
+  if (!/^10\.\d{4,9}\/\S+$/.test(cleanDoi)) throw new Error("Invalid DOI");
+  try {
+    const work = await fetchJson(queryUrl(`https://api.openalex.org/works/https://doi.org/${encodeURIComponent(cleanDoi)}`, {
+      mailto: getOpenAlexMailto()
+    }));
+    if (!work.id) throw new Error("Invalid OpenAlex work response");
+    return { ...openAlexWork(work), provider: "OpenAlex", retrieved_at: (/* @__PURE__ */ new Date()).toISOString() };
+  } catch {
+  }
+  const data = await fetchJson(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`);
+  if (!data.message || !data.message.DOI && !data.message.title) throw new Error("Invalid Crossref work response");
+  return { ...crossrefWork(data.message), provider: "Crossref (Live Fallback)", retrieved_at: (/* @__PURE__ */ new Date()).toISOString() };
+}
+async function coinGeckoMarkets(assets, vsCurrency) {
+  const ids = boundedStrings(assets, "assets").map((asset) => asset.toLowerCase());
+  if (ids.some((id) => !/^[a-z0-9][a-z0-9-]*$/.test(id))) throw new Error("assets must be CoinGecko IDs");
+  if (new Set(ids).size !== ids.length) throw new Error("assets must not contain duplicates");
+  const currency = boundedText(vsCurrency, "vsCurrency", 5).toLowerCase();
+  if (!/^[a-z]{3,5}$/.test(currency)) throw new Error("Invalid quote currency");
+  const data = await fetchJson(queryUrl("https://api.coingecko.com/api/v3/coins/markets", {
+    vs_currency: currency,
+    ids: ids.join(","),
+    per_page: ids.length,
+    page: 1,
+    sparkline: "false"
+  }), { headers: getCoinGeckoHeaders() });
+  if (!Array.isArray(data)) throw new Error("Invalid CoinGecko market response");
+  const byId = new Map(data.map((coin) => [coin.id, coin]));
+  const missing = ids.filter((id) => !byId.has(id) || numberOrNull(byId.get(id).current_price) === null);
+  if (missing.length) throw new Error(`CoinGecko missing requested assets or ${currency.toUpperCase()} prices: ${missing.join(", ")}`);
+  return { currency, coins: ids.map((id) => byId.get(id)) };
+}
+async function fetchCryptoPrice(assets = ["ethereum", "bitcoin"], vsCurrency = "usd") {
+  const { currency, coins } = await coinGeckoMarkets(assets, vsCurrency);
+  return {
+    quote_currency: currency.toUpperCase(),
+    prices: coins.map((coin) => ({
+      asset: coin.id,
+      symbol: coin.symbol?.toUpperCase() ?? null,
+      price: coin.current_price,
+      change_24h_percent: numberOrNull(coin.price_change_percentage_24h),
+      high_24h: numberOrNull(coin.high_24h),
+      low_24h: numberOrNull(coin.low_24h),
+      quote_volume_24h: numberOrNull(coin.total_volume)
+    })),
+    source: "CoinGecko",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchCryptoMarket(assets = ["ethereum", "bitcoin"]) {
+  const { coins } = await coinGeckoMarkets(assets, "usd");
+  return {
+    quote_currency: "USD",
+    market_data: coins.map((coin) => ({
+      id: coin.id,
+      symbol: coin.symbol?.toUpperCase() ?? null,
+      name: coin.name ?? null,
+      current_price: coin.current_price,
+      change_24h_percent: numberOrNull(coin.price_change_percentage_24h),
+      market_cap: numberOrNull(coin.market_cap),
+      market_cap_rank: numberOrNull(coin.market_cap_rank),
+      total_volume_24h: numberOrNull(coin.total_volume),
+      high_24h: numberOrNull(coin.high_24h),
+      low_24h: numberOrNull(coin.low_24h),
+      circulating_supply: numberOrNull(coin.circulating_supply),
+      total_supply: numberOrNull(coin.total_supply),
+      max_supply: numberOrNull(coin.max_supply),
+      ath: numberOrNull(coin.ath),
+      ath_date: coin.ath_date ?? null
+    })),
+    source: "CoinGecko",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchFxRates(baseCurrency = "USD", targets = ["EUR", "GBP", "JPY", "CAD"]) {
+  const base2 = boundedText(baseCurrency, "baseCurrency", 3).toUpperCase();
+  const currencies = boundedStrings(targets, "targets").map((target) => target.toUpperCase());
+  if (![base2, ...currencies].every((currency) => /^[A-Z]{3}$/.test(currency))) throw new Error("Invalid FX currency code");
+  if (new Set(currencies).size !== currencies.length) throw new Error("targets must not contain duplicates");
+  const otherCurrencies = currencies.filter((currency) => currency !== base2);
+  const data = await fetchJson(queryUrl("https://api.frankfurter.app/latest", {
+    from: base2,
+    to: otherCurrencies.length ? otherCurrencies.join(",") : void 0
+  }));
+  if (data.base !== base2 || !data.rates || typeof data.date !== "string") throw new Error("Invalid Frankfurter response");
+  const missing = otherCurrencies.filter((currency) => !(typeof data.rates[currency] === "number" && Number.isFinite(data.rates[currency]) && data.rates[currency] > 0));
+  if (missing.length) throw new Error(`Frankfurter missing requested rates: ${missing.join(", ")}`);
+  return {
+    base: data.base,
+    date: data.date,
+    rates: Object.fromEntries(currencies.map((currency) => [currency, currency === base2 ? 1 : data.rates[currency]])),
+    source: "European Central Bank (Frankfurter)",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchWeather(latitude = 37.7749, longitude = -122.4194) {
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new Error("Invalid weather coordinates");
+  const data = await fetchJson(queryUrl("https://api.open-meteo.com/v1/forecast", {
+    latitude,
+    longitude,
+    current: "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+    daily: "weather_code,temperature_2m_max,temperature_2m_min",
+    timezone: "auto",
+    forecast_days: 3,
+    temperature_unit: "celsius",
+    wind_speed_unit: "kmh"
+  }));
+  if (!data.current || !Array.isArray(data.daily?.time)) throw new Error("Invalid Open-Meteo response");
+  return {
+    latitude: data.latitude,
+    longitude: data.longitude,
+    timezone: data.timezone,
+    elevation_m: data.elevation,
+    current: {
+      temperature_c: numberOrNull(data.current.temperature_2m),
+      humidity_percent: numberOrNull(data.current.relative_humidity_2m),
+      wind_speed_kmh: numberOrNull(data.current.wind_speed_10m),
+      weather_code: numberOrNull(data.current.weather_code)
+    },
+    forecast_daily: data.daily.time.slice(0, 3).map((date, i) => ({
+      date,
+      max_temp_c: numberOrNull(data.daily.temperature_2m_max?.[i]),
+      min_temp_c: numberOrNull(data.daily.temperature_2m_min?.[i]),
+      weather_code: numberOrNull(data.daily.weather_code?.[i])
+    })),
+    source: "Open-Meteo",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchGeocode(query) {
+  query = boundedText(query, "query");
+  try {
+    const data2 = await fetchJson(queryUrl("https://photon.komoot.io/api/", { q: query, limit: 3 }));
+    if (!Array.isArray(data2.features)) throw new Error("Invalid Photon response");
+    return {
+      query,
+      features: data2.features.slice(0, 3).map((f) => ({
+        name: f.properties.name,
+        country: f.properties.country,
+        city: f.properties.city || f.properties.name,
+        state: f.properties.state,
+        coordinates: { latitude: f.geometry.coordinates[1], longitude: f.geometry.coordinates[0] },
+        osm_type: f.properties.osm_type
+      })),
+      source: "Photon / OpenStreetMap",
+      retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  } catch {
+  }
+  const data = await fetchJson(queryUrl("https://nominatim.openstreetmap.org/search", {
+    q: query,
+    format: "json",
+    limit: 3,
+    addressdetails: 1
+  }), { headers: { "User-Agent": "Relay-x402-Gateway/1.0" } });
+  if (!Array.isArray(data)) throw new Error("Invalid Nominatim response");
+  return {
+    query,
+    features: data.slice(0, 3).map((item) => ({
+      name: item.name || item.display_name?.split(",")[0] || null,
+      country: item.address?.country ?? null,
+      city: item.address?.city || item.address?.town || item.address?.village || null,
+      state: item.address?.state ?? null,
+      coordinates: { latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) },
+      osm_type: item.osm_type ?? null
+    })),
+    source: "Nominatim / OpenStreetMap (Live Fallback)",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchHolidays(countryCode = "US", year = (/* @__PURE__ */ new Date()).getUTCFullYear()) {
+  const country = boundedText(countryCode, "countryCode", 2).toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country)) throw new Error("Invalid country code");
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) throw new Error("year must be an integer from 1900 to 2100");
+  const data = await fetchJson(`https://date.nager.at/api/v3/PublicHolidays/${encodeURIComponent(year)}/${encodeURIComponent(country)}`);
+  if (!Array.isArray(data)) throw new Error("Invalid Nager.Date response");
+  return {
+    country_code: country,
+    year,
+    holidays: data.map((holiday) => ({
+      date: holiday.date,
+      local_name: holiday.localName,
+      name: holiday.name,
+      global: holiday.global,
+      counties: holiday.counties ?? null,
+      types: holiday.types
+    })),
+    source: "Nager.Date",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchKnowledgeSearch(query) {
+  query = boundedText(query, "query");
+  const data = await fetchJson(queryUrl("https://www.wikidata.org/w/api.php", {
+    action: "wbsearchentities",
+    search: query,
+    language: "en",
+    format: "json",
+    origin: "*",
+    limit: 5
+  }));
+  if (!Array.isArray(data.search)) throw new Error("Invalid Wikidata response");
+  return {
+    query,
+    entities: data.search.slice(0, 5).map((entity) => ({
+      id: entity.id,
+      label: entity.label,
+      description: entity.description || "No description provided",
+      concept_uri: entity.concepturi || `https://www.wikidata.org/entity/${encodeURIComponent(entity.id)}`,
+      url: entity.url ? entity.url.startsWith("http") ? entity.url : `https:${entity.url}` : `https://www.wikidata.org/wiki/${encodeURIComponent(entity.id)}`
+    })),
+    source: "Wikidata",
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchNewsSearch(query) {
+  query = boundedText(query, "query");
+  const now = Date.now();
+  const cutoff = now - NEWS_WINDOW_MS;
+  const data = await fetchJson(queryUrl("https://hn.algolia.com/api/v1/search_by_date", {
+    query,
+    tags: "story",
+    hitsPerPage: 5,
+    numericFilters: `created_at_i>=${Math.ceil(cutoff / 1e3)},created_at_i<=${Math.floor(now / 1e3)}`
+  }));
+  if (!Array.isArray(data.hits)) throw new Error("Invalid Hacker News Algolia response");
+  const articles = data.hits.flatMap((hit) => {
+    const submittedAt = typeof hit.created_at_i === "number" ? hit.created_at_i * 1e3 : Date.parse(hit.created_at);
+    if (!Number.isFinite(submittedAt) || submittedAt < cutoff || submittedAt > now) return [];
+    const discussionUrl = queryUrl("https://news.ycombinator.com/item", { id: hit.objectID });
+    let articleUrl;
+    try {
+      const url = new URL(hit.url);
+      if (url.protocol === "https:" || url.protocol === "http:") articleUrl = url;
+    } catch {
+    }
+    return [{
+      title: hit.title,
+      source: articleUrl?.hostname.replace(/^www\./, "") || "news.ycombinator.com",
+      url: articleUrl?.toString() || discussionUrl,
+      published_at: null,
+      submitted_at: new Date(submittedAt).toISOString(),
+      discussion_url: discussionUrl,
+      submitted_by: hit.author ?? null,
+      points: numberOrNull(hit.points),
+      num_comments: numberOrNull(hit.num_comments),
+      summary: null
+    }];
+  }).sort((a, b) => b.submitted_at.localeCompare(a.submitted_at)).slice(0, 5);
+  return {
+    query,
+    total_articles: articles.length,
+    articles,
+    source: "Hacker News submissions (Algolia)",
+    date_basis: "Hacker News submission time; original article publication date is unknown",
+    window_start: new Date(cutoff).toISOString(),
+    window_end: new Date(now).toISOString(),
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function fetchResearchPack(topic) {
+  topic = boundedText(topic, "topic");
+  const [academic, knowledge, news] = await Promise.all([
+    fetchAcademicSearch(topic, 3),
+    fetchKnowledgeSearch(topic),
+    fetchNewsSearch(topic)
+  ]);
+  return {
+    topic,
+    provenance: {
+      generated_by: "Relay Deterministic Multi-Source Aggregator",
+      is_synthetic_mock: false,
+      sources: {
+        academic: { provider: academic.provider, retrieved_at: academic.retrieved_at },
+        knowledge: { provider: knowledge.source, retrieved_at: knowledge.retrieved_at },
+        news: { provider: news.source, retrieved_at: news.retrieved_at, window_start: news.window_start, window_end: news.window_end, date_basis: news.date_basis }
+      },
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    },
+    evidence: {
+      scholarly_citations: academic.results,
+      wikidata_entities: knowledge.entities,
+      recent_news_and_events: news.articles
+    },
+    deterministic_summary: `Retrieved ${academic.results.length} scholarly records, ${knowledge.entities.length} Wikidata entities, and ${news.articles.length} recent Hacker News submissions for topic "${topic}". No claim verification or full-text assessment was performed.`
+  };
+}
+async function fetchVerifyClaim(claim) {
+  claim = boundedText(claim, "claim", 2048);
+  const lower = claim.toLowerCase();
+  const keywords = lower.replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter((word) => word.length > 3 && !["this", "that", "with", "from", "have", "were", "been", "which"].includes(word));
+  const searchQuery = claim.slice(0, 1024);
+  const [wikiCheck, academicCheck] = await Promise.allSettled([
+    fetchKnowledgeSearch(searchQuery),
+    fetchAcademicSearch(searchQuery, 2)
+  ]);
+  if (wikiCheck.status === "rejected" && academicCheck.status === "rejected") {
+    throw new Error("Claim evidence retrieval failed across Wikidata and academic providers");
+  }
+  const wiki = wikiCheck.status === "fulfilled" ? wikiCheck.value : null;
+  const academic = academicCheck.status === "fulfilled" ? academicCheck.value : null;
+  const evidenceTrail = [
+    {
+      provider: wiki?.source ?? "Wikidata",
+      matches_found: wiki?.entities.length ?? 0,
+      status: wiki ? wiki.entities.length ? "Retrieved search results" : "No search results" : "Unavailable",
+      results: wiki?.entities ?? [],
+      retrieved_at: wiki?.retrieved_at ?? null
+    },
+    {
+      provider: academic?.provider ?? "OpenAlex / Crossref",
+      matches_found: academic?.results.length ?? 0,
+      status: academic ? academic.results.length ? "Retrieved search results" : "No search results" : "Unavailable",
+      results: academic?.results ?? [],
+      retrieved_at: academic?.retrieved_at ?? null
+    }
+  ];
+  return {
+    claim,
+    verdict: "INSUFFICIENT",
+    method: "Search-result retrieval only; no entailment, contradiction, source-quality, or full-text assessment. Search matches are not proof and confidence is not estimated.",
+    search_query: searchQuery,
+    search_query_truncated: searchQuery.length !== claim.length,
+    retrieval_complete: Boolean(wiki && academic),
+    heuristic_metrics: {
+      confidence: null,
+      lexical_terms_extracted: keywords,
+      negation_cue_detected: /\b(not|never|fake|false|refuses|cannot|untrue|denies|debunked)\b/.test(lower),
+      live_sources_consulted: [wiki?.source, academic?.provider].filter((source) => Boolean(source)),
+      live_evidence_count: evidenceTrail.reduce((count, entry) => count + entry.matches_found, 0)
+    },
+    evidence_trail: evidenceTrail,
+    verified_at: null,
+    retrieved_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function checkProviders() {
+  const probes = [
+    { name: "coinGecko", url: "https://api.coingecko.com/api/v3/ping", init: { headers: getCoinGeckoHeaders() }, role: "primary", valid: (data) => typeof data?.gecko_says === "string" },
+    { name: "openAlex", url: queryUrl("https://api.openalex.org/works", { "per-page": 1, select: "id", mailto: getOpenAlexMailto() }), role: "primary", valid: (data) => Array.isArray(data?.results) },
+    { name: "crossref", url: queryUrl("https://api.crossref.org/works", { rows: 1, select: "DOI" }), role: "fallback", valid: (data) => Array.isArray(data?.message?.items) },
+    { name: "frankfurter", url: queryUrl("https://api.frankfurter.app/latest", { from: "USD", to: "EUR" }), role: "primary", valid: (data) => data?.base === "USD" && numberOrNull(data?.rates?.EUR) !== null && data.rates.EUR > 0 },
+    { name: "openMeteo", url: queryUrl("https://api.open-meteo.com/v1/forecast", { latitude: 0, longitude: 0, current: "temperature_2m", forecast_days: 1 }), role: "primary", valid: (data) => numberOrNull(data?.current?.temperature_2m) !== null },
+    { name: "photon", url: queryUrl("https://photon.komoot.io/api/", { q: "Berlin", limit: 1 }), role: "primary", valid: (data) => Array.isArray(data?.features) },
+    { name: "nominatim", url: queryUrl("https://nominatim.openstreetmap.org/search", { q: "Berlin", format: "json", limit: 1 }), init: { headers: { "User-Agent": "Relay-x402-Gateway/1.0" } }, role: "fallback", valid: (data) => Array.isArray(data) },
+    { name: "nagerDate", url: `https://date.nager.at/api/v3/PublicHolidays/${(/* @__PURE__ */ new Date()).getUTCFullYear()}/DE`, role: "primary", valid: (data) => Array.isArray(data) },
+    { name: "wikidata", url: queryUrl("https://www.wikidata.org/w/api.php", { action: "wbsearchentities", search: "Berlin", language: "en", format: "json", limit: 1 }), role: "primary", valid: (data) => Array.isArray(data?.search) },
+    { name: "hackerNews", url: queryUrl("https://hn.algolia.com/api/v1/search_by_date", { tags: "story", hitsPerPage: 1 }), role: "primary", valid: (data) => Array.isArray(data?.hits) }
+  ];
+  const checks = {};
+  let next = 0;
+  const worker = async () => {
+    while (next < probes.length) {
+      const probe = probes[next++];
+      const started = performance.now();
+      try {
+        const data = await fetchJson(probe.url, probe.init, HEALTH_TIMEOUT_MS);
+        if (!probe.valid(data)) throw new Error("Unexpected provider probe response");
+        checks[probe.name] = { status: "healthy", latencyMs: Math.round(performance.now() - started), role: probe.role };
+      } catch (error) {
+        checks[probe.name] = {
+          status: "degraded",
+          latencyMs: Math.round(performance.now() - started),
+          role: probe.role,
+          error: error instanceof Error ? error.message : "Provider probe failed"
+        };
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  return {
+    status: Object.values(checks).every((check) => check.status === "healthy") ? "operational" : "degraded",
+    gateway: "Relay x402 Gateway",
+    scope: "One lightweight availability probe per listed primary/fallback provider; not all resource routes, data correctness, payment settlement, blockchain health, or gateway uptime.",
+    providers: checks,
+    checkedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    cacheTtlSeconds: HEALTH_CACHE_MS / 1e3
+  };
+}
+var healthCache;
+var healthInFlight;
+async function getProvidersHealth() {
+  if (healthCache && Date.now() < healthCache.expiresAt) return healthCache.value;
+  if (!healthInFlight) {
+    healthInFlight = checkProviders().then((value) => {
+      healthCache = { value, expiresAt: Date.now() + HEALTH_CACHE_MS };
+      return value;
+    }).finally(() => {
+      healthInFlight = void 0;
+    });
+  }
+  return healthInFlight;
+}
+
+// src/server/x402Engine.ts
+var configuredNetwork = process.env.RELAY_NETWORK ?? "base";
+if (configuredNetwork !== "base" && configuredNetwork !== "base-sepolia") {
+  throw new Error("RELAY_NETWORK must be base or base-sepolia");
+}
+var treasury = process.env.RELAY_TREASURY_ADDRESS ?? DEFAULT_TREASURY_ADDRESS;
+if (!/^0x[0-9a-fA-F]{40}$/.test(treasury) || /^0x0{40}$/i.test(treasury)) {
+  throw new Error("RELAY_TREASURY_ADDRESS must be a nonzero address");
+}
+var RELAY_RESOURCES2 = RELAY_RESOURCES.map((resource) => ({
+  ...resource,
+  network: configuredNetwork,
+  chainId: configuredNetwork === "base" ? base.id : baseSepolia.id,
+  asset: configuredNetwork === "base" ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA,
+  payTo: getAddress2(treasury)
+}));
+var address = z.string().regex(/^0x[0-9a-fA-F]{40}$/).refine((value) => !/^0x0{40}$/i.test(value));
+var uint256 = z.string().refine((value) => /^(0|[1-9][0-9]{0,77})$/.test(value) && BigInt(value) < 1n << 256n);
+var paymentSchema = PaymentPayloadV2Schema.omit({ extensions: true }).strict().extend({
+  accepted: PaymentRequirementsV2Schema.strict().extend({
+    scheme: z.literal("exact"),
+    network: z.enum(["eip155:8453", "eip155:84532"]),
+    asset: address,
+    payTo: address,
+    amount: uint256,
+    maxTimeoutSeconds: z.literal(PAYMENT_TIMEOUT_SECONDS),
+    extra: z.object({ name: z.enum(["USD Coin", "USDC"]), version: z.literal("2") }).strict()
+  }),
+  payload: z.object({
+    signature: z.string().regex(/^0x(?:[0-9a-fA-F]{2}){1,4096}$/),
+    authorization: z.object({
+      from: address,
+      to: address,
+      value: uint256,
+      validAfter: uint256,
+      validBefore: uint256,
+      nonce: z.string().regex(/^0x[0-9a-fA-F]{64}$/)
+    }).strict()
+  }).strict()
+});
+var messages = {
+  invalid_payment: "Payment does not match the required signed authorization.",
+  payment_expired: "Payment authorization has expired or is too close to expiry.",
+  payment_not_yet_valid: "Payment authorization is not yet valid.",
+  payment_replayed: "Payment authorization has already been used or cancelled.",
+  payment_configuration_error: "Payment settlement is not configured correctly.",
+  payment_verification_unavailable: "Payment verification is temporarily unavailable.",
+  settlement_failed: "Payment settlement was not confirmed as successful.",
+  settlement_pending: "Payment may have been submitted. Reconcile the transaction before paying again.",
+  settlement_in_progress: "This authorization is already being settled. Do not pay again."
+};
+var PaymentError = class extends Error {
+  constructor(code) {
+    super(messages[code]);
+    this.code = code;
+  }
+  code;
+};
+function failure(errorCode, payer = "", amount = "0") {
+  return { valid: false, payer, amount, errorCode, error: messages[errorCode] };
+}
+function reasonCode(reason) {
+  if (reason === "invalid_exact_evm_nonce_already_used") return "payment_replayed";
+  if (reason === "invalid_exact_evm_payload_authorization_valid_before") return "payment_expired";
+  if (reason === "invalid_exact_evm_payload_authorization_valid_after") return "payment_not_yet_valid";
+  if (reason === "invalid_exact_evm_failed_to_verify_signature" || reason === "invalid_exact_evm_transaction_simulation_failed") {
+    return "payment_verification_unavailable";
+  }
+  return "invalid_payment";
+}
+function resourceUrl(resource, origin = process.env.GATEWAY_ORIGIN ?? "https://relayx402.vercel.app") {
+  const url = new URL(resource.url, origin);
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) {
+    throw new PaymentError("payment_configuration_error");
+  }
+  return url.href;
+}
+function requirementsFor(resource) {
+  const isBase = resource.network === "base";
+  const asset = isBase ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA;
+  if (!isBase && resource.network !== "base-sepolia" || resource.chainId !== (isBase ? base.id : baseSepolia.id) || resource.asset.toLowerCase() !== asset.toLowerCase() || !address.safeParse(resource.payTo).success || !uint256.safeParse(resource.amount).success || BigInt(resource.amount) === 0n) {
+    throw new PaymentError("payment_configuration_error");
+  }
+  return {
+    scheme: "exact",
+    network: isBase ? "eip155:8453" : "eip155:84532",
+    asset,
+    amount: resource.amount,
+    payTo: getAddress2(resource.payTo),
+    maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS,
+    extra: { name: isBase ? "USD Coin" : "USDC", version: "2" }
+  };
+}
+function generate402Challenge(resource, network = resource.network, origin) {
+  const selected = network === resource.network ? resource : {
+    ...resource,
+    network,
+    chainId: network === "base" ? base.id : baseSepolia.id,
+    asset: network === "base" ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA
+  };
   return {
     x402Version: 2,
     error: "Payment Required",
-    message: `Payment of ${(Number(resource.amount) / 1e6).toFixed(2)} USDC on ${network.toUpperCase()} is required to access ${resource.name}.`,
-    paymentRequirements: {
-      scheme: "transferWithAuthorization",
-      network,
-      chainId: network === "base" ? 8453 : 84532,
-      tokenAddress: network === "base" ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA,
-      tokenSymbol: "USDC",
-      amount: resource.amount,
-      amountFormatted: `${(Number(resource.amount) / 1e6).toFixed(2)} USDC`,
-      payTo: resource.payTo,
-      nonce,
-      validBefore,
-      resource: resource.path
-    }
+    resource: { url: resourceUrl(resource, origin), description: resource.description, mimeType: "application/json" },
+    accepts: [requirementsFor(selected)]
   };
 }
-var USDC_ERC3009_ABI = [
-  {
-    inputs: [
-      { name: "from", type: "address" },
-      { name: "to", type: "address" },
-      { name: "value", type: "uint256" },
-      { name: "validAfter", type: "uint256" },
-      { name: "validBefore", type: "uint256" },
-      { name: "nonce", type: "bytes32" },
-      { name: "v", type: "uint8" },
-      { name: "r", type: "bytes32" },
-      { name: "s", type: "bytes32" }
-    ],
-    name: "receiveWithAuthorization",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  },
-  {
-    inputs: [
-      { name: "from", type: "address" },
-      { name: "to", type: "address" },
-      { name: "value", type: "uint256" },
-      { name: "validAfter", type: "uint256" },
-      { name: "validBefore", type: "uint256" },
-      { name: "nonce", type: "bytes32" },
-      { name: "v", type: "uint8" },
-      { name: "r", type: "bytes32" },
-      { name: "s", type: "bytes32" }
-    ],
-    name: "transferWithAuthorization",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  }
-];
-async function broadcastOnChainTransferWithAuthorization(params) {
-  const facilitatorKey = typeof process !== "undefined" && (process.env?.RELAY_FACILITATOR_KEY || process.env?.AGENT_PRIVATE_KEY) || "";
-  if (!facilitatorKey) {
-    return { attempted: false, success: false, error: "No facilitator key configured" };
-  }
+function validateProof(input, resource) {
+  const parsed = paymentSchema.safeParse(input);
+  if (!parsed.success) return failure("invalid_payment");
+  const proof = parsed.data;
+  const auth = proof.payload.authorization;
   try {
-    const cleanKey = facilitatorKey.startsWith("0x") ? facilitatorKey : `0x${facilitatorKey}`;
-    const account = privateKeyToAccount2(cleanKey);
-    const rpcUrl = typeof process !== "undefined" && process.env?.BASE_RPC_URL || "https://mainnet.base.org";
-    const client = createWalletClient2({
-      account,
-      chain: base2,
-      transport: http(rpcUrl)
-    });
-    const parsedSig = parseSignature2(params.signature);
-    const v = Number(parsedSig.v ?? (parsedSig.yParity === 0 ? 27 : 28));
-    try {
-      const hash = await client.writeContract({
-        address: params.tokenAddress,
-        abi: USDC_ERC3009_ABI,
-        functionName: "receiveWithAuthorization",
-        args: [
-          params.from,
-          params.to,
-          params.value,
-          params.validAfter,
-          params.validBefore,
-          params.nonce,
-          v,
-          parsedSig.r,
-          parsedSig.s
-        ]
-      });
-      return { attempted: true, success: true, txHash: hash };
-    } catch (rxErr) {
-      try {
-        const hash = await client.writeContract({
-          address: params.tokenAddress,
-          abi: USDC_ERC3009_ABI,
-          functionName: "transferWithAuthorization",
-          args: [
-            params.from,
-            params.to,
-            params.value,
-            params.validAfter,
-            params.validBefore,
-            params.nonce,
-            v,
-            parsedSig.r,
-            parsedSig.s
-          ]
-        });
-        return { attempted: true, success: true, txHash: hash };
-      } catch (fallbackErr) {
-        return { attempted: true, success: false, error: fallbackErr.message || rxErr.message };
-      }
+    const requirements = requirementsFor(resource);
+    const accepted = proof.accepted;
+    if (accepted.network !== requirements.network || accepted.scheme !== requirements.scheme || accepted.asset.toLowerCase() !== requirements.asset.toLowerCase() || accepted.payTo.toLowerCase() !== requirements.payTo.toLowerCase() || accepted.amount !== requirements.amount || auth.value !== requirements.amount || auth.to.toLowerCase() !== requirements.payTo.toLowerCase() || accepted.extra.name !== requirements.extra.name || accepted.extra.version !== requirements.extra.version || proof.resource && proof.resource.url !== resourceUrl(resource)) {
+      return failure("invalid_payment", auth.from, resource.amount);
     }
-  } catch (err) {
-    return { attempted: true, success: false, error: err.message };
+    const now = BigInt(Math.floor(Date.now() / 1e3));
+    if (BigInt(auth.validBefore) < now + 6n) return failure("payment_expired", auth.from, resource.amount);
+    if (BigInt(auth.validAfter) >= now) return failure("payment_not_yet_valid", auth.from, resource.amount);
+    if (BigInt(auth.validBefore) > now + BigInt(PAYMENT_TIMEOUT_SECONDS) || BigInt(auth.validBefore) <= BigInt(auth.validAfter)) {
+      return failure("invalid_payment", auth.from, resource.amount);
+    }
+    return { proof, requirements };
+  } catch (error) {
+    return failure(error instanceof PaymentError ? error.code : "payment_configuration_error", auth.from, resource.amount);
   }
 }
-async function verifyPaymentProof(proof, resource, challenge) {
-  if (!proof || !proof.payerAddress) {
-    return { valid: false, payer: "", amount: "0", error: "Missing payment proof or payer address" };
+var settlementEvents = parseAbi([
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)"
+]);
+var inFlight = /* @__PURE__ */ new Set();
+var pending = /* @__PURE__ */ new Map();
+var nonceQueues = /* @__PURE__ */ new Map();
+function authorizationKey(proof) {
+  const auth = proof.payload.authorization;
+  return `${proof.accepted.network}:${proof.accepted.asset}:${auth.from}:${auth.nonce}`.toLowerCase();
+}
+function pendingFor(key) {
+  for (const [id, entry] of pending) if (entry.expiresAt < Date.now()) pending.delete(id);
+  return pending.get(key);
+}
+async function serializeSend(key, send) {
+  const previous = nonceQueues.get(key) ?? Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => gate);
+  nonceQueues.set(key, tail);
+  await previous;
+  try {
+    return await send();
+  } finally {
+    release();
+    if (nonceQueues.get(key) === tail) nonceQueues.delete(key);
   }
-  const now = Date.now();
-  if (proof.timestamp && now - proof.timestamp > 36e5) {
-    return { valid: false, payer: proof.payerAddress, amount: "0", error: "Payment authorization expired" };
+}
+function createFacilitator(resource, proof, attempt) {
+  const key = process.env.RELAY_FACILITATOR_KEY;
+  const normalizedKey = key?.startsWith("0x") ? key : `0x${key ?? ""}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(normalizedKey)) throw new PaymentError("payment_configuration_error");
+  let account;
+  try {
+    account = privateKeyToAccount(normalizedKey);
+  } catch {
+    throw new PaymentError("payment_configuration_error");
   }
-  if (proof.clientSignature && proof.clientSignature.startsWith("0x")) {
-    try {
-      const auth = proof.authorization;
-      const validBefore = auth?.validBefore ? BigInt(auth.validBefore) : BigInt(Math.floor(Date.now() / 1e3) + 3600);
-      const value = auth?.value ? BigInt(auth.value) : BigInt(resource.amount);
-      const nonceRaw = auth?.nonce || challenge?.paymentRequirements.nonce || "0x0";
-      const nonce = nonceRaw.startsWith("0x") && nonceRaw.length === 66 ? nonceRaw : `0x${nonceRaw.replace(/^0x/, "").padStart(64, "0")}`;
-      const domain = {
-        name: "USD Coin",
-        version: "2",
-        chainId: resource.chainId,
-        verifyingContract: getAddress2(resource.asset)
-      };
-      const message = {
-        from: getAddress2(proof.payerAddress),
-        to: getAddress2(resource.payTo),
-        value,
-        validAfter: 0n,
-        validBefore,
-        nonce
-      };
-      const recoveredAddress = await recoverTypedDataAddress({
-        domain,
-        types: EIP712_TRANSFER_TYPES,
-        primaryType: "TransferWithAuthorization",
-        message,
-        signature: proof.clientSignature
+  const chain = resource.network === "base" ? base : baseSepolia;
+  const rpcUrl = process.env.BASE_RPC_URL ?? chain.rpcUrls.default.http[0];
+  const timeout = Number(process.env.RELAY_SETTLEMENT_TIMEOUT_MS ?? 15e3);
+  try {
+    if (!["https:", "http:"].includes(new URL(rpcUrl).protocol) || !Number.isInteger(timeout) || timeout < 100 || timeout > 3e4) {
+      throw new Error();
+    }
+  } catch {
+    throw new PaymentError("payment_configuration_error");
+  }
+  const transport = http(rpcUrl, { timeout: 5e3, retryCount: 0 });
+  const publicClient = createPublicClient({ chain, transport });
+  const walletClient = createWalletClient({ chain, account, transport });
+  const auth = proof.payload.authorization;
+  const token = getAddress2(resource.asset);
+  const signer = {
+    getAddresses: () => [account.address],
+    getCode: (args) => publicClient.getCode(args),
+    readContract: (args) => publicClient.readContract({ ...args, abi: args.abi, account: args.account ?? account.address }),
+    verifyTypedData: (args) => publicClient.verifyTypedData(args),
+    sendTransaction: async () => {
+      throw new PaymentError("invalid_payment");
+    },
+    writeContract: async (args) => {
+      if (!attempt || args.functionName !== "transferWithAuthorization" || args.address.toLowerCase() !== token.toLowerCase()) {
+        throw new PaymentError("invalid_payment");
+      }
+      return serializeSend(`${chain.id}:${account.address}`, async () => {
+        const data = `${encodeFunctionData({ abi: args.abi, functionName: args.functionName, args: args.args })}${randomBytes(16).toString("hex")}`;
+        const request = await walletClient.prepareTransactionRequest({ account, chain, type: "eip1559", to: token, data, gas: args.gas });
+        const serialized = await account.signTransaction({
+          type: "eip1559",
+          chainId: chain.id,
+          to: token,
+          data,
+          nonce: request.nonce,
+          gas: request.gas,
+          maxFeePerGas: request.maxFeePerGas,
+          maxPriorityFeePerGas: request.maxPriorityFeePerGas
+        });
+        attempt.txHash = keccak256(serialized);
+        const returnedHash = await walletClient.sendRawTransaction({ serializedTransaction: serialized });
+        if (returnedHash.toLowerCase() !== attempt.txHash.toLowerCase()) throw new PaymentError("settlement_pending");
+        return attempt.txHash;
       });
-      if (recoveredAddress.toLowerCase() !== proof.payerAddress.toLowerCase()) {
-        return {
-          valid: false,
-          payer: proof.payerAddress,
-          amount: "0",
-          error: `Cryptographic EIP-712 verification failed: recovered ${recoveredAddress} does not match payer ${proof.payerAddress}`
-        };
+    },
+    waitForTransactionReceipt: async ({ hash }) => {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 2, timeout, pollingInterval: 1e3, checkReplacement: false });
+      if (receipt.transactionHash.toLowerCase() !== hash.toLowerCase() || !Array.isArray(receipt.logs)) {
+        throw new PaymentError("settlement_pending");
       }
-      if (value < BigInt(resource.amount)) {
-        return {
-          valid: false,
-          payer: proof.payerAddress,
-          amount: value.toString(),
-          error: `Insufficient authorized amount: authorized ${value.toString()} micro-USDC, requires ${resource.amount}`
-        };
+      if (receipt.status === "success") {
+        const logs = receipt.logs.filter((log) => log.address.toLowerCase() === token.toLowerCase());
+        const transfers = parseEventLogs({ abi: settlementEvents, eventName: "Transfer", logs });
+        const authorizations = parseEventLogs({ abi: settlementEvents, eventName: "AuthorizationUsed", logs });
+        const transferred = transfers.some((log) => log.args.from.toLowerCase() === auth.from.toLowerCase() && log.args.to.toLowerCase() === auth.to.toLowerCase() && log.args.value === BigInt(auth.value));
+        const consumed = authorizations.some((log) => log.args.authorizer.toLowerCase() === auth.from.toLowerCase() && log.args.nonce.toLowerCase() === auth.nonce.toLowerCase());
+        const nonceUsed = await publicClient.readContract({
+          address: token,
+          abi: eip3009ABI,
+          functionName: "authorizationState",
+          args: [getAddress2(auth.from), auth.nonce],
+          blockNumber: receipt.blockNumber
+        });
+        if (!transferred || !consumed || nonceUsed !== true) throw new PaymentError("settlement_pending");
       }
-      let settledTxHash = proof.txHash || "";
-      let broadcastResult = void 0;
-      if (!settledTxHash && proof.clientSignature) {
-        try {
-          broadcastResult = await broadcastOnChainTransferWithAuthorization({
-            tokenAddress: getAddress2(resource.asset),
-            from: getAddress2(proof.payerAddress),
-            to: getAddress2(resource.payTo),
-            value,
-            validAfter: 0n,
-            validBefore,
-            nonce,
-            signature: proof.clientSignature
-          });
-          if (broadcastResult.success && broadcastResult.txHash) {
-            settledTxHash = broadcastResult.txHash;
-          }
-        } catch {
-        }
-      }
-      if (!settledTxHash) {
-        settledTxHash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-      }
+      return receipt;
+    }
+  };
+  const scheme = new ExactEvmScheme(signer, { simulateInSettle: true });
+  return { publicClient, scheme, chain };
+}
+async function verifyOnChain(context, proof, requirements) {
+  const auth = proof.payload.authorization;
+  if (await context.publicClient.getChainId() !== context.chain.id) throw new PaymentError("payment_configuration_error");
+  const used = await context.publicClient.readContract({
+    address: getAddress2(requirements.asset),
+    abi: eip3009ABI,
+    functionName: "authorizationState",
+    args: [getAddress2(auth.from), auth.nonce]
+  });
+  if (used === true) return failure("payment_replayed", auth.from, requirements.amount);
+  if (used !== false) throw new PaymentError("payment_verification_unavailable");
+  const result = await context.scheme.verify(proof, requirements);
+  return result.isValid ? { valid: true, payer: auth.from, amount: requirements.amount } : failure(reasonCode(result.invalidReason), auth.from, requirements.amount);
+}
+async function verifyPaymentProof(input, resource) {
+  const checked = validateProof(input, resource);
+  if (!("proof" in checked)) return checked;
+  const { proof, requirements } = checked;
+  const key = authorizationKey(proof);
+  const existing = pendingFor(key);
+  if (existing) return { ...failure("settlement_pending", proof.payload.authorization.from, resource.amount), txHash: existing.txHash };
+  if (inFlight.has(key)) return failure("settlement_in_progress", proof.payload.authorization.from, resource.amount);
+  try {
+    return await verifyOnChain(createFacilitator(resource, proof), proof, requirements);
+  } catch (error) {
+    return failure(error instanceof PaymentError ? error.code : "payment_verification_unavailable", proof.payload.authorization.from, resource.amount);
+  }
+}
+async function settlePaymentProof(input, resource) {
+  const checked = validateProof(input, resource);
+  if (!("proof" in checked)) return checked;
+  const { proof, requirements } = checked;
+  const auth = proof.payload.authorization;
+  const key = authorizationKey(proof);
+  const existing = pendingFor(key);
+  if (existing) return { ...failure("settlement_pending", auth.from, resource.amount), txHash: existing.txHash, network: requirements.network };
+  if (inFlight.has(key)) return failure("settlement_in_progress", auth.from, resource.amount);
+  inFlight.add(key);
+  const attempt = {};
+  let result;
+  try {
+    const context = createFacilitator(resource, proof, attempt);
+    const verified = await verifyOnChain(context, proof, requirements);
+    if (!verified.valid) return verified;
+    const settled = await context.scheme.settle(proof, requirements);
+    if (settled.success && attempt.txHash && settled.transaction.toLowerCase() === attempt.txHash.toLowerCase()) {
       return {
         valid: true,
-        payer: proof.payerAddress,
-        amount: resource.amount,
-        txHash: settledTxHash,
-        onChainBroadcast: broadcastResult,
-        settledAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    } catch (e) {
-      return {
-        valid: false,
-        payer: proof.payerAddress,
-        amount: "0",
-        error: `Signature recovery exception: ${e.message}`
+        payer: auth.from,
+        amount: requirements.amount,
+        txHash: attempt.txHash,
+        settledAt: (/* @__PURE__ */ new Date()).toISOString(),
+        network: requirements.network
       };
     }
+    const code = settled.errorReason === "settlement_pending" || attempt.txHash && !settled.transaction ? "settlement_pending" : settled.errorReason === "invalid_exact_evm_nonce_already_used" ? "payment_replayed" : "settlement_failed";
+    result = { ...failure(code, auth.from, resource.amount), txHash: attempt.txHash, network: requirements.network };
+  } catch (error) {
+    result = {
+      ...failure(attempt.txHash ? "settlement_pending" : error instanceof PaymentError ? error.code : "settlement_failed", auth.from, resource.amount),
+      txHash: attempt.txHash,
+      network: requirements.network
+    };
+  } finally {
+    inFlight.delete(key);
   }
-  return {
-    valid: true,
-    payer: proof.payerAddress,
-    amount: resource.amount,
-    txHash: proof.txHash || `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`,
-    settledAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
+  if (result.errorCode === "settlement_pending" && attempt.txHash) {
+    pending.set(key, { txHash: attempt.txHash, expiresAt: Number(auth.validBefore) * 1e3 + 6e4 });
+  }
+  return result;
 }
 async function dispatchResourceRequest(resourceId, params) {
   switch (resourceId) {
     case "academic_search":
-      return await fetchAcademicSearch(params.query || "blockchain", params.limit || 3);
+      return fetchAcademicSearch(params.query, params.limit ?? 3);
     case "academic_work":
-      return await fetchAcademicWork(params.doi || "10.1038/s41586-020-2649-2");
+      return fetchAcademicWork(params.doi);
     case "crypto_price":
-      return await fetchCryptoPrice(params.assets || ["ethereum", "bitcoin"], params.vsCurrency || "usd");
+      return fetchCryptoPrice(params.assets, params.vsCurrency ?? "usd");
     case "crypto_market":
-      return await fetchCryptoMarket(params.assets || ["ethereum", "bitcoin"]);
+      return fetchCryptoMarket(params.assets);
     case "fx_rates":
-      return await fetchFxRates(params.baseCurrency || "USD", params.targets || ["EUR", "GBP", "JPY"]);
+      return fetchFxRates(params.baseCurrency ?? "USD", params.targets ?? ["EUR", "GBP", "JPY"]);
     case "weather":
-      return await fetchWeather(params.latitude || 37.7749, params.longitude || -122.4194);
+      return fetchWeather(params.latitude, params.longitude);
     case "geocode":
-      return await fetchGeocode(params.query || "San Francisco");
+      return fetchGeocode(params.query);
     case "holidays":
-      return await fetchHolidays(params.countryCode || "US", params.year || 2026);
+      return fetchHolidays(params.countryCode, params.year ?? (/* @__PURE__ */ new Date()).getUTCFullYear());
     case "knowledge_search":
-      return await fetchKnowledgeSearch(params.query || "Base layer 2");
+      return fetchKnowledgeSearch(params.query);
     case "news_search":
-      return await fetchNewsSearch(params.query || "Base ecosystem");
+      return fetchNewsSearch(params.query);
     case "research":
-      return await fetchResearchPack(params.topic || "layer 2 state channels");
+      return fetchResearchPack(params.topic);
     case "verify":
-      return await fetchVerifyClaim(params.claim || "Base is an Ethereum Layer 2 rollup");
+      return fetchVerifyClaim(params.claim);
     case "health":
-      return await getProvidersHealth();
+      return getProvidersHealth();
     default:
       throw new Error(`Unknown resource ID: ${resourceId}`);
   }
 }
-function getWellKnownManifest(origin = "https://relayx402.vercel.app") {
+function getWellKnownManifest(origin) {
   return {
     x402Version: 2,
     name: "Relay",
-    description: "Pay-per-use information infrastructure for AI agents and developers: every capability is paid per request in USDC on Base via the x402 protocol.",
-    network: "base",
-    chainId: 8453,
-    facilitator: "Relay x402 Gateway (Coinbase CDP / Base Native)",
-    resources: RELAY_RESOURCES.map((r) => ({
-      url: `${origin}${r.path}`,
-      method: r.method,
-      description: `${r.description} - ${(Number(r.amount) / 1e6).toFixed(2)} USDC per call.`,
-      network: `eip155:8453`,
-      asset: r.asset,
-      amount: r.amount,
-      payTo: r.payTo
+    description: "Pay-per-use information retrieval with confirmed USDC payments using x402 v2 exact.",
+    network: configuredNetwork === "base" ? "eip155:8453" : "eip155:84532",
+    chainId: configuredNetwork === "base" ? base.id : baseSepolia.id,
+    facilitator: "Relay self-hosted @x402/evm facilitator",
+    resources: RELAY_RESOURCES2.map((resource) => ({
+      ...requirementsFor(resource),
+      url: resourceUrl(resource, origin),
+      method: resource.method,
+      description: resource.description,
+      mimeType: "application/json"
     }))
   };
 }
 
-// src/server/gatewayHandler.ts
-async function handleGatewayRequest(method, pathname, headers, rawBody, origin = typeof process !== "undefined" && process.env?.GATEWAY_ORIGIN || typeof import.meta !== "undefined" && import.meta.env?.VITE_GATEWAY_URL || "https://relayx402.vercel.app") {
-  const cleanPath = pathname.split("?")[0].replace(/\/+$/, "");
-  if (cleanPath === "/.well-known/x402" || cleanPath === "/.well-known/x402.json") {
-    return {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, max-age=3600"
-      },
-      body: getWellKnownManifest(origin)
+// src/shared/validation.ts
+var MAX_REQUEST_BYTES = 16 * 1024;
+var limits = {
+  query: { minLength: 1, maxLength: 1024 },
+  topic: { minLength: 1, maxLength: 1024 },
+  claim: { minLength: 1, maxLength: 2048 },
+  doi: { minLength: 7, maxLength: 2048, pattern: "^(?:https?://(?:dx\\.)?doi\\.org/)?10\\.\\d{4,9}/\\S+$" },
+  assets: { minItems: 1, maxItems: 10, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9][a-z0-9-]*$" } },
+  targets: { minItems: 1, maxItems: 10, uniqueItems: true, items: { type: "string", pattern: "^[A-Z]{3}$" } },
+  vsCurrency: { pattern: "^[a-z]{3,5}$" },
+  baseCurrency: { pattern: "^[A-Z]{3}$" },
+  countryCode: { pattern: "^[A-Z]{2}$" },
+  limit: { type: "integer", minimum: 1, maximum: 20 },
+  year: { type: "integer", minimum: 1900, maximum: 2100 },
+  latitude: { minimum: -90, maximum: 90 },
+  longitude: { minimum: -180, maximum: 180 }
+};
+function getRequestSchema(resource) {
+  const properties = {};
+  for (const [name, field] of Object.entries(resource.schema.request)) {
+    properties[name] = {
+      type: field.type.includes("array") ? "array" : field.type,
+      description: field.description,
+      ...limits[name]
     };
-  }
-  if (cleanPath === "/health" || cleanPath === "/v1/health" || cleanPath === "/api/health" || cleanPath === "/api/v1/health" || cleanPath === "/.well-known/health") {
-    const healthData = await dispatchResourceRequest("health", {});
-    return {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "no-cache"
-      },
-      body: healthData
-    };
-  }
-  const normalizedRoute = cleanPath.replace(/^\/api/, "");
-  const resource = RELAY_RESOURCES.find((r) => r.path === normalizedRoute || r.url === normalizedRoute);
-  if (!resource) {
-    return {
-      status: 404,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: {
-        error: "Not Found",
-        message: `Endpoint ${cleanPath} not found in Relay x402 registry. Consult /.well-known/x402 for available endpoints.`
-      }
-    };
-  }
-  if (method === "OPTIONS") {
-    return {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-Payment-Proof, X-Payer-Address, Authorization"
-      },
-      body: null
-    };
-  }
-  let parsedParams = {};
-  if (rawBody) {
-    if (typeof rawBody === "string") {
-      try {
-        parsedParams = JSON.parse(rawBody);
-      } catch {
-        parsedParams = {};
-      }
-    } else if (typeof rawBody === "object") {
-      parsedParams = rawBody;
+    if (!field.required && Object.prototype.hasOwnProperty.call(resource.defaultParams, name)) {
+      properties[name].default = name === "year" ? (/* @__PURE__ */ new Date()).getUTCFullYear() : resource.defaultParams[name];
     }
   }
-  const proofHeader = headers["x-payment-proof"] || headers["X-Payment-Proof"] || headers["authorization"] || headers["Authorization"];
-  const payerHeader = headers["x-payer-address"] || headers["X-Payer-Address"];
-  if (!proofHeader) {
-    const challenge = generate402Challenge(resource, "base");
-    return {
-      status: 402,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Expose-Headers": "WWW-Authenticate, X-402-Cost, X-402-Payee, X-402-Token",
-        "WWW-Authenticate": `X402 scheme="transferWithAuthorization", token="${resource.asset}", amount="${resource.amount}", payee="${resource.payTo}", chainId="${resource.chainId}"`,
-        "X-402-Cost": `${resource.priceUsdc} USDC`,
-        "X-402-Payee": resource.payTo,
-        "X-402-Token": resource.asset
-      },
-      body: challenge
-    };
-  }
-  let proofObj = {
-    scheme: "transferWithAuthorization",
-    payerAddress: "0x0000000000000000000000000000000000000000",
-    timestamp: Date.now()
+  return {
+    type: "object",
+    properties,
+    required: Object.entries(resource.schema.request).filter(([, field]) => field.required).map(([name]) => name),
+    additionalProperties: false
   };
-  let rawStr = (Array.isArray(proofHeader) ? proofHeader[0] : proofHeader).trim();
-  const payerStr = Array.isArray(payerHeader) ? payerHeader[0] : payerHeader;
-  if (rawStr.toLowerCase().startsWith("bearer ")) {
-    rawStr = rawStr.slice(7).trim();
-  } else if (rawStr.toLowerCase().startsWith("x402 ")) {
-    rawStr = rawStr.slice(5).trim();
+}
+function validateValue(name, value, rule) {
+  if (rule.type === "string") {
+    if (typeof value !== "string" || !value.trim() || rule.minLength !== void 0 && value.length < rule.minLength || rule.maxLength !== void 0 && value.length > rule.maxLength || rule.pattern && !new RegExp(rule.pattern).test(value)) {
+      throw new Error(`Invalid ${name}: expected a non-empty string matching the endpoint schema.`);
+    }
+  } else if (rule.type === "array") {
+    if (!Array.isArray(value) || value.length < (rule.minItems ?? 1) || value.length > (rule.maxItems ?? 10)) {
+      throw new Error(`Invalid ${name}: expected an array of 1 to 10 strings.`);
+    }
+    if (rule.uniqueItems && new Set(value).size !== value.length) throw new Error(`Invalid ${name}: duplicate items are not allowed.`);
+    for (const item of value) validateValue(name, item, rule.items ?? { type: "string" });
+  } else if (typeof value !== "number" || !Number.isFinite(value) || rule.type === "integer" && !Number.isInteger(value) || rule.minimum !== void 0 && value < rule.minimum || rule.maximum !== void 0 && value > rule.maximum) {
+    throw new Error(`Invalid ${name}: expected ${rule.type} between ${rule.minimum} and ${rule.maximum}.`);
   }
-  if (rawStr.startsWith("%7B") || rawStr.startsWith("%7b")) {
+}
+function validateResourceParams(resource, input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Request body must be a JSON object.");
+  const schema = getRequestSchema(resource);
+  const source = input;
+  const result = {};
+  for (const name of Object.keys(source)) {
+    if (!Object.prototype.hasOwnProperty.call(schema.properties, name)) throw new Error(`Unknown request field: ${name}.`);
+  }
+  for (const [name, rule] of Object.entries(schema.properties)) {
+    const supplied = Object.prototype.hasOwnProperty.call(source, name);
+    if (!supplied && schema.required.includes(name)) throw new Error(`Missing required request field: ${name}.`);
+    let value = supplied ? source[name] : rule.default;
+    if (value === void 0 && !supplied) continue;
+    if (typeof value === "string") {
+      value = value.trim();
+      if (name === "baseCurrency" || name === "countryCode") value = value.toUpperCase();
+      if (name === "vsCurrency") value = value.toLowerCase();
+      if (name === "doi") value = value.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "");
+    }
+    if (Array.isArray(value)) {
+      value = value.map((item) => typeof item !== "string" ? item : name === "targets" ? item.trim().toUpperCase() : item.trim().toLowerCase());
+    }
+    validateValue(name, value, rule);
+    result[name] = value;
+  }
+  return result;
+}
+
+// src/server/gatewayHandler.ts
+var GATEWAY_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, PAYMENT-SIGNATURE",
+  "Access-Control-Expose-Headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE",
+  "X-Content-Type-Options": "nosniff",
+  "Cache-Control": "no-store"
+};
+var defaults = { verify: verifyPaymentProof, settle: settlePaymentProof, dispatch: dispatchResourceRequest };
+var unavailableCodes = /* @__PURE__ */ new Set(["payment_configuration_error", "payment_verification_unavailable", "settlement_pending", "settlement_in_progress"]);
+var healthPaths = /* @__PURE__ */ new Set(["/health", "/v1/health", "/api/health", "/api/v1/health", "/.well-known/health"]);
+async function handleGatewayRequest(method, pathname, headers, rawBody, origin = process.env.GATEWAY_ORIGIN || "https://relayx402.vercel.app", dependencies = defaults) {
+  const respond = (status, body, extra = {}) => ({ status, headers: { ...GATEWAY_HEADERS, ...extra }, body });
+  const header = (name) => {
+    const values = Object.entries(headers).filter(([key]) => key.toLowerCase() === name.toLowerCase()).map(([, value]) => value);
+    if (values.length > 1 || Array.isArray(values[0])) throw new Error(`Duplicate ${name} header.`);
+    return values[0];
+  };
+  const cleanPath = pathname.split("?")[0].replace(/\/+$/, "");
+  const discovery = ["/.well-known/x402", "/.well-known/x402.json", "/api/well-known/x402"].includes(cleanPath);
+  const health = healthPaths.has(cleanPath);
+  const matchedResource = RELAY_RESOURCES2.find((candidate) => candidate.path === cleanPath.replace(/^\/api(?=\/v1\/)/, ""));
+  const resource = matchedResource ? { ...matchedResource, url: new URL(cleanPath, origin).href } : void 0;
+  if (!discovery && !health && !resource) return respond(404, { error: "Not Found", message: "Consult /.well-known/x402 for available endpoints." });
+  const allowedMethods = resource ? `${resource.method}, OPTIONS` : "GET, HEAD, OPTIONS";
+  if (method === "OPTIONS") return respond(204, null, { "Access-Control-Allow-Methods": allowedMethods, "Access-Control-Max-Age": "600" });
+  if (resource ? method !== resource.method : method !== "GET" && method !== "HEAD") {
+    return respond(405, { error: "Method Not Allowed" }, { Allow: allowedMethods, "Access-Control-Allow-Methods": allowedMethods });
+  }
+  if (discovery) return respond(200, method === "HEAD" ? null : getWellKnownManifest(origin), { "Cache-Control": "public, max-age=300" });
+  if (health) {
     try {
-      rawStr = decodeURIComponent(rawStr);
+      const result = await dependencies.dispatch("health", {});
+      const operational = result && typeof result === "object" && "status" in result && result.status === "operational";
+      return respond(operational ? 200 : 503, method === "HEAD" ? null : result);
     } catch {
+      return respond(503, { status: "degraded", error: "Provider health checks unavailable." });
     }
   }
+  if (!resource) return respond(404, { error: "Not Found" });
+  let params;
+  let encodedProof;
   try {
-    if (rawStr.startsWith("{")) {
-      proofObj = JSON.parse(rawStr);
-    } else {
-      let parsedFromB64 = false;
-      try {
-        if (typeof Buffer !== "undefined") {
-          const b64Decoded = Buffer.from(rawStr, "base64").toString("utf-8");
-          if (b64Decoded.trim().startsWith("{")) {
-            proofObj = JSON.parse(b64Decoded);
-            parsedFromB64 = true;
-          }
-        }
-      } catch {
-        parsedFromB64 = false;
-      }
-      if (!parsedFromB64) {
-        proofObj = {
-          scheme: "transferWithAuthorization",
-          clientSignature: rawStr,
-          payerAddress: payerStr || "0x0000000000000000000000000000000000000000",
-          timestamp: Date.now()
-        };
-      }
+    const length = header("content-length");
+    if (length && (!/^\d+$/.test(length) || Number(length) > MAX_REQUEST_BYTES)) {
+      return respond(413, { error: "Request Too Large", message: `Maximum request body is ${MAX_REQUEST_BYTES} bytes.` });
     }
-    if (!proofObj.payerAddress && proofObj.payload?.from) {
-      proofObj.payerAddress = proofObj.payload.from;
+    if (header("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+      return respond(415, { error: "Unsupported Media Type", message: "Send Content-Type: application/json." });
     }
-    if (!proofObj.clientSignature && proofObj.signature) {
-      proofObj.clientSignature = proofObj.signature;
+    const serialized = typeof rawBody === "string" ? rawBody : JSON.stringify(rawBody === void 0 ? {} : rawBody);
+    if (Buffer.byteLength(serialized, "utf8") > MAX_REQUEST_BYTES) return respond(413, { error: "Request Too Large" });
+    params = validateResourceParams(resource, serialized ? JSON.parse(serialized) : {});
+    encodedProof = header("payment-signature");
+    if (["authorization", "x-payment-proof", "x-payment", "x-payer-address"].some((name) => header(name) !== void 0)) {
+      return respond(400, { error: "Unsupported Payment Format", message: "Use a canonical x402 v2 PAYMENT-SIGNATURE header; legacy proof headers are not accepted." });
     }
-    if (!proofObj.authorization && proofObj.payload) {
-      proofObj.authorization = proofObj.payload;
-    }
+  } catch (error) {
+    return respond(400, { error: "Bad Request", message: error instanceof SyntaxError ? "Malformed JSON body." : error instanceof Error ? error.message : "Invalid request." });
+  }
+  const challenge = generate402Challenge(resource, resource.network, origin);
+  const challengeHeader = { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify(challenge)).toString("base64") };
+  if (!encodedProof) return respond(402, challenge, challengeHeader);
+  let proof;
+  try {
+    if (encodedProof.length > 8192 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encodedProof)) throw new Error("Invalid payment header.");
+    const decoded = Buffer.from(encodedProof, "base64");
+    if (decoded.toString("base64") !== encodedProof) throw new Error("Invalid base64 payment header.");
+    proof = JSON.parse(decoded.toString("utf8"));
   } catch {
-    return {
-      status: 400,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: { error: "Bad Request", message: "Malformed X-Payment-Proof header" }
-    };
+    return respond(400, { error: "Bad Request", message: "PAYMENT-SIGNATURE must be base64-encoded x402 v2 JSON." });
   }
-  const verification = await verifyPaymentProof(proofObj, resource);
-  if (!verification.valid) {
-    return {
-      status: 402,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      },
-      body: {
-        error: "Payment Verification Failed",
-        message: verification.error || "Cryptographic EIP-712 payment authorization was invalid or rejected.",
-        challenge: generate402Challenge(resource, "base")
-      }
-    };
-  }
+  let verification;
   try {
-    const data = await dispatchResourceRequest(resource.id, parsedParams);
-    return {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "X-402-Settlement-Tx": verification.txHash || "settled",
-        "X-402-Settlement-Payer": verification.payer
-      },
-      body: {
-        _settlement: {
-          protocol: "RFC x402 v2",
-          network: "Base (Chain ID 8453)",
-          asset: "USDC",
-          cost_usdc: `$${resource.priceUsdc.toFixed(2)}`,
-          payer: verification.payer,
-          tx_hash: verification.txHash,
-          settled_at: verification.settledAt
-        },
-        data
-      }
-    };
-  } catch (err) {
-    return {
-      status: 502,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: {
-        error: "Upstream Provider Error",
-        message: err.message || "Error communicating with external live provider."
-      }
-    };
+    verification = await dependencies.verify(proof, resource);
+  } catch {
+    return respond(503, { error: "Payment Verification Unavailable", message: "Payment verification could not complete. No payment was submitted." });
   }
+  if (!verification.valid) {
+    const code = verification.errorCode || "invalid_payment";
+    if (code === "settlement_pending" || code === "settlement_in_progress") {
+      const transaction2 = verification.txHash && /^0x[0-9a-fA-F]{64}$/.test(verification.txHash) ? verification.txHash : "";
+      const network2 = `eip155:${resource.chainId}`;
+      const paymentResponse2 = { success: false, errorReason: code, transaction: transaction2, network: network2, payer: verification.payer, amount: verification.amount };
+      return respond(503, {
+        error: "Payment Settlement Failed",
+        code,
+        transaction: transaction2,
+        network: network2,
+        message: "Settlement is not confirmed. Reconcile this authorization on-chain before retrying; do not submit a new payment."
+      }, { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify(paymentResponse2)).toString("base64") });
+    }
+    return respond(unavailableCodes.has(code) ? 503 : 402, { error: "Payment Verification Failed", code, message: verification.error || "Payment authorization rejected." }, challengeHeader);
+  }
+  let data;
+  try {
+    data = await dependencies.dispatch(resource.id, params);
+    const serialized = JSON.stringify(data);
+    if (serialized === void 0 || Buffer.byteLength(serialized, "utf8") > 1e6) throw new Error("Invalid provider response size.");
+    data = JSON.parse(serialized);
+  } catch {
+    return respond(502, { error: "Upstream Provider Error", message: "The provider could not fulfill the request. No payment was submitted." });
+  }
+  let settlement;
+  try {
+    settlement = await dependencies.settle(proof, resource);
+  } catch {
+    return respond(503, { error: "Payment Settlement Failed", code: "settlement_pending", message: "Settlement status is uncertain. Reconcile this authorization on-chain before retrying; do not submit a new payment." });
+  }
+  const transaction = settlement.txHash && /^0x[0-9a-fA-F]{64}$/.test(settlement.txHash) ? settlement.txHash : "";
+  const network = `eip155:${resource.chainId}`;
+  const confirmed = settlement.valid && Boolean(transaction) && Boolean(settlement.settledAt) && settlement.amount === resource.amount && settlement.payer.toLowerCase() === verification.payer.toLowerCase() && (!settlement.network || settlement.network === network);
+  const paymentResponse = {
+    success: confirmed,
+    transaction,
+    network,
+    payer: settlement.payer,
+    amount: settlement.amount,
+    ...!confirmed ? { errorReason: settlement.errorCode || "settlement_failed" } : {}
+  };
+  const responseHeader = { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify(paymentResponse)).toString("base64") };
+  if (!confirmed) {
+    const code = settlement.errorCode || "settlement_failed";
+    return respond(unavailableCodes.has(code) || transaction ? 503 : 402, {
+      error: "Payment Settlement Failed",
+      code,
+      transaction,
+      network,
+      message: transaction || unavailableCodes.has(code) ? "Settlement is not confirmed. Reconcile this authorization on-chain before retrying; do not submit a new payment." : settlement.error || "Payment settlement was rejected. No paid data was released."
+    }, responseHeader);
+  }
+  return respond(200, {
+    _settlement: {
+      protocol: "x402 v2",
+      network,
+      asset: "USDC",
+      cost_usdc: `$${resource.priceUsdc.toFixed(2)}`,
+      payer: settlement.payer,
+      tx_hash: transaction,
+      settled_at: settlement.settledAt
+    },
+    data
+  }, responseHeader);
 }
 
 // src/api-handlers/v1-route.ts
 async function handler(req, res) {
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-payment, X-PAYMENT");
-    return res.status(204).end();
+  try {
+    const host = typeof req.headers.host === "string" ? req.headers.host : "relayx402.vercel.app";
+    const origin = process.env.GATEWAY_ORIGIN || `https://${host}`;
+    const response = await handleGatewayRequest(req.method || "GET", req.url || "/", req.headers, req.body, origin);
+    Object.entries(response.headers).forEach(([key, value]) => res.setHeader(key, value));
+    if (response.body === null || response.body === void 0 || req.method === "HEAD") return res.status(response.status).end();
+    return res.status(response.status).json(response.body);
+  } catch {
+    Object.entries(GATEWAY_HEADERS).forEach(([key, value]) => res.setHeader(key, value));
+    return res.status(500).json({ error: "Gateway Internal Error" });
   }
-  const host = req.headers["host"] || "relayx402.vercel.app";
-  const protocol = req.headers["x-forwarded-proto"] || "https";
-  const origin = `${protocol}://${host}`;
-  let cleanPath = (req.url || "").split("?")[0];
-  if (cleanPath === "/api/v1/[...route]" || cleanPath === "/v1/[...route]") {
-    const rawPath = req.headers["x-matched-path"] || req.headers["x-invoke-path"] || "";
-    if (rawPath) {
-      cleanPath = rawPath.split("?")[0];
-    }
-  }
-  const response = await handleGatewayRequest(
-    req.method || "POST",
-    cleanPath,
-    req.headers,
-    req.body,
-    origin
-  );
-  Object.entries(response.headers).forEach(([key, value]) => {
-    res.setHeader(key, value);
-  });
-  if (response.body === null || response.body === void 0) {
-    return res.status(response.status).end();
-  }
-  return res.status(response.status).json(response.body);
 }
 export {
   handler as default

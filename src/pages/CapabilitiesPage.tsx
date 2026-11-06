@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
-import { RELAY_RESOURCES } from '../server/x402Engine';
-import { X402Resource } from '../types/x402';
+import { RELAY_RESOURCES } from '../shared/resources';
+import type { X402Resource } from '../types/x402';
+import { getGatewayUrl } from '../config/wagmi';
 import { FaArrowRight, FaMagnifyingGlass } from 'react-icons/fa6';
 import { BookOpen, TrendingUp, CloudSun, MapPin, Calendar, CheckCircle2, Globe, Layers } from 'lucide-react';
 
@@ -97,7 +98,7 @@ export const CapabilitiesPage: React.FC<CapabilitiesPageProps> = ({
               Capabilities directory
             </h1>
             <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
-              Twelve production endpoints on Base. Callable without subscriptions, keys, or accounts. Paid per request in micro-USDC via the x402 protocol.
+              Twelve gateway capabilities on Base. No subscription or API key is required. Each request uses the displayed USDC price; provider coverage and availability vary.
             </p>
           </div>
 
@@ -171,7 +172,7 @@ export const CapabilitiesPage: React.FC<CapabilitiesPageProps> = ({
                     <code className="truncate mr-2">{res.path}</code>
                     <button
                       type="button"
-                      onClick={() => copyPath(`https://relayx402.vercel.app${res.path}`, res.id)}
+                      onClick={() => copyPath(`${getGatewayUrl()}${res.path}`, res.id)}
                       title="Copy endpoint path"
                       className="text-neutral-500 hover:text-neutral-200 transition-colors shrink-0 text-[11px]"
                     >

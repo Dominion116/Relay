@@ -8,11 +8,15 @@ export default defineConfig({
   plugins: [react(), relayGatewayPlugin()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   server: {
     port: 5173,
-    host: true
+    host: '127.0.0.1',
+    strictPort: true
+  },
+  preview: {
+    host: '127.0.0.1'
   }
 });

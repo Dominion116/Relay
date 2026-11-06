@@ -1,3 +1,6 @@
+export type RelayNetwork = 'base' | 'base-sepolia';
+export type X402Network = 'eip155:8453' | 'eip155:84532';
+
 export interface X402Resource {
   id: string;
   name: string;
@@ -6,7 +9,7 @@ export interface X402Resource {
   path: string;
   method: 'POST' | 'GET';
   description: string;
-  network: 'base' | 'base-sepolia';
+  network: RelayNetwork;
   chainId: number;
   asset: string; // Base USDC address
   assetSymbol: string;
@@ -20,73 +23,85 @@ export interface X402Resource {
   };
 }
 
+export interface X402ResourceInfo {
+  url: string;
+  description: string;
+  mimeType: string;
+}
+
+export interface X402PaymentRequirements {
+  scheme: 'exact';
+  network: X402Network;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  extra: { name: 'USD Coin' | 'USDC'; version: '2' };
+}
+
 export interface X402Challenge {
-  x402Version: number;
-  error: string;
-  message: string;
-  paymentRequirements: {
-    scheme: 'erc3009' | 'transferWithAuthorization' | 'onchain_transfer';
-    network: 'base' | 'base-sepolia';
-    chainId: number;
-    tokenAddress: string;
-    tokenSymbol: string;
-    amount: string;
-    amountFormatted: string;
-    payTo: string;
-    nonce: string;
-    validBefore: number;
-    resource: string;
-  };
+  x402Version: 2;
+  error?: string;
+  resource: X402ResourceInfo;
+  accepts: X402PaymentRequirements[];
+}
+
+export interface X402Authorization {
+  from: string;
+  to: string;
+  value: string;
+  validAfter: string;
+  validBefore: string;
+  nonce: string;
 }
 
 export interface X402PaymentProof {
-  scheme: 'transferWithAuthorization' | 'onchain_tx';
-  txHash?: string;
-  authorization?: {
-    from: string;
-    to: string;
-    value: string;
-    validAfter: number;
-    validBefore: number;
-    nonce: string;
-    v?: number;
-    r?: string;
-    s?: string;
+  x402Version: 2;
+  resource?: X402ResourceInfo;
+  accepted: X402PaymentRequirements;
+  payload: {
+    signature: string;
+    authorization: X402Authorization;
   };
-  clientSignature?: string;
-  payerAddress: string;
-  timestamp: number;
 }
+
+export type X402ErrorCode =
+  | 'invalid_payment'
+  | 'payment_expired'
+  | 'payment_not_yet_valid'
+  | 'payment_replayed'
+  | 'payment_configuration_error'
+  | 'payment_verification_unavailable'
+  | 'settlement_failed'
+  | 'settlement_pending'
+  | 'settlement_in_progress';
 
 export interface X402VerificationResult {
   valid: boolean;
   payer: string;
   amount: string;
-  txHash?: string;
-  settledAt?: string;
   error?: string;
-  onChainBroadcast?: {
-    attempted: boolean;
-    success: boolean;
-    txHash?: string;
-    error?: string;
-  };
+  errorCode?: X402ErrorCode;
+  /** A known transaction for reconciliation; its presence does not establish settlement. */
+  txHash?: string;
+}
+
+export interface X402SettlementResult extends X402VerificationResult {
+  settledAt?: string;
+  network?: X402Network;
 }
 
 export interface WellKnownX402Manifest {
-  x402Version: number;
+  x402Version: 2;
   name: string;
   description: string;
-  network: string;
+  network: X402Network;
   chainId: number;
   facilitator: string;
-  resources: Array<{
+  resources: Array<X402PaymentRequirements & {
     url: string;
     method: string;
     description: string;
-    network: string;
-    asset: string;
-    amount: string;
-    payTo: string;
+    mimeType: string;
   }>;
 }

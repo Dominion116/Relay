@@ -1,652 +1,346 @@
-import { X402Resource, X402Challenge, X402PaymentProof, X402VerificationResult, WellKnownX402Manifest } from '../types/x402';
-import * as providers from './providers';
-import { recoverTypedDataAddress, getAddress, parseSignature, createWalletClient, http, type Address, type Hex } from 'viem';
+import { randomBytes } from 'node:crypto';
+import { PaymentPayloadV2Schema, PaymentRequirementsV2Schema, z } from '@x402/core/schemas';
+import { ExactEvmScheme } from '@x402/evm/exact/facilitator';
+import { eip3009ABI, type FacilitatorEvmSigner } from '@x402/evm';
+import {
+  createPublicClient, createWalletClient, encodeFunctionData, getAddress, http,
+  keccak256, parseAbi, parseEventLogs, type Abi, type Address, type Hex
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { base } from 'viem/chains';
-import { EIP712_TRANSFER_TYPES } from './agentWallet';
+import { base, baseSepolia } from 'viem/chains';
+import type {
+  RelayNetwork, X402Challenge, X402ErrorCode, X402PaymentProof, X402PaymentRequirements,
+  X402Resource, X402SettlementResult, X402VerificationResult, WellKnownX402Manifest
+} from '../types/x402';
+import {
+  RELAY_RESOURCES as PUBLIC_RESOURCES, BASE_USDC_MAINNET, BASE_USDC_SEPOLIA,
+  DEFAULT_TREASURY_ADDRESS, PAYMENT_TIMEOUT_SECONDS
+} from '../shared/resources';
+import * as providers from './providers';
 
-// Official Base USDC Token Contracts
-export const BASE_USDC_MAINNET = getAddress('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
-export const BASE_USDC_SEPOLIA = getAddress('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
+export { BASE_USDC_MAINNET, BASE_USDC_SEPOLIA, DEFAULT_TREASURY_ADDRESS } from '../shared/resources';
 
-// Default merchant receiver address on Base
-const envTreasury = typeof process !== 'undefined' && process.env?.RELAY_TREASURY_ADDRESS
-  ? process.env.RELAY_TREASURY_ADDRESS
-  : '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072';
-export const DEFAULT_TREASURY_ADDRESS = getAddress(envTreasury);
+const configuredNetwork = process.env.RELAY_NETWORK ?? 'base';
+if (configuredNetwork !== 'base' && configuredNetwork !== 'base-sepolia') {
+  throw new Error('RELAY_NETWORK must be base or base-sepolia');
+}
+const treasury = process.env.RELAY_TREASURY_ADDRESS ?? DEFAULT_TREASURY_ADDRESS;
+if (!/^0x[0-9a-fA-F]{40}$/.test(treasury) || /^0x0{40}$/i.test(treasury)) {
+  throw new Error('RELAY_TREASURY_ADDRESS must be a nonzero address');
+}
+export const RELAY_RESOURCES: X402Resource[] = PUBLIC_RESOURCES.map(resource => ({
+  ...resource,
+  network: configuredNetwork,
+  chainId: configuredNetwork === 'base' ? base.id : baseSepolia.id,
+  asset: configuredNetwork === 'base' ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA,
+  payTo: getAddress(treasury)
+}));
 
-export const RELAY_RESOURCES: X402Resource[] = [
-  {
-    id: 'academic_search',
-    name: 'Academic Search',
-    category: 'academic',
-    url: '/v1/academic/search',
-    path: '/v1/academic/search',
-    method: 'POST',
-    description: 'Search scholarly literature via OpenAlex with normalized DOIs, citations, authors, and open-access status.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '80000', // 0.08 USDC
-    priceUsdc: 0.08,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { query: 'cryptographic payment channel layer 2', limit: 3 },
-    schema: {
-      request: {
-        query: { type: 'string', required: true, description: 'Keywords or academic subject' },
-        limit: { type: 'number', required: false, description: 'Number of works (1-20)' }
-      },
-      responseSample: {
-        query: "cryptographic payment channel layer 2",
-        total_results: 142,
-        results: [{ title: "Off-chain Scalability and x402 Micropayments", doi: "10.1145/3543507" }]
-      }
-    }
-  },
-  {
-    id: 'academic_work',
-    name: 'Academic Work DOI',
-    category: 'academic',
-    url: '/v1/academic/work',
-    path: '/v1/academic/work',
-    method: 'POST',
-    description: 'Retrieve detailed scholarly work and citation metrics by digital object identifier (DOI).',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '60000', // 0.06 USDC
-    priceUsdc: 0.06,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { doi: '10.1038/s41586-020-2649-2' },
-    schema: {
-      request: {
-        doi: { type: 'string', required: true, description: 'Digital Object Identifier' }
-      },
-      responseSample: {
-        doi: "https://doi.org/10.1038/s41586-020-2649-2",
-        title: "An ultra-scalable consensus protocol",
-        cited_by_count: 320
-      }
-    }
-  },
-  {
-    id: 'crypto_price',
-    name: 'Crypto Price & 24h',
-    category: 'crypto',
-    url: '/v1/crypto/price',
-    path: '/v1/crypto/price',
-    method: 'POST',
-    description: 'Real-time spot price and 24-hour percentage change for cryptocurrency assets via CoinGecko.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '40000', // 0.04 USDC
-    priceUsdc: 0.04,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { assets: ['ethereum', 'bitcoin'], vsCurrency: 'usd' },
-    schema: {
-      request: {
-        assets: { type: 'array of string', required: true, description: 'CoinGecko IDs (e.g. ["ethereum", "bitcoin"])' },
-        vsCurrency: { type: 'string', required: false, description: 'Quote currency (default: "usd")' }
-      },
-      responseSample: {
-        quote_currency: "USD",
-        prices: [{ asset: "ethereum", price: 2620.45, change_24h_percent: 2.1 }]
-      }
-    }
-  },
-  {
-    id: 'crypto_market',
-    name: 'Crypto Market Cap & Volume',
-    category: 'crypto',
-    url: '/v1/crypto/market',
-    path: '/v1/crypto/market',
-    method: 'POST',
-    description: 'Market capitalization, rank, 24h trading volume, and circulating supply.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '60000', // 0.06 USDC
-    priceUsdc: 0.06,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { assets: ['ethereum', 'bitcoin'] },
-    schema: {
-      request: {
-        assets: { type: 'array of string', required: true, description: 'Asset identifiers' }
-      },
-      responseSample: {
-        market_data: [{ symbol: "ETH", current_price: 2620.45, market_cap: 315000000000 }]
-      }
-    }
-  },
-  {
-    id: 'fx_rates',
-    name: 'Foreign Exchange Rates',
-    category: 'market',
-    url: '/v1/fx/rates',
-    path: '/v1/fx/rates',
-    method: 'POST',
-    description: 'Official European Central Bank (ECB) reference exchange rates for international fiat currencies.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '40000', // 0.04 USDC
-    priceUsdc: 0.04,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { baseCurrency: 'USD', targets: ['EUR', 'GBP', 'JPY', 'CAD'] },
-    schema: {
-      request: {
-        baseCurrency: { type: 'string', required: false, description: 'Base 3-letter currency code (default: USD)' },
-        targets: { type: 'array of string', required: false, description: 'List of target currency codes' }
-      },
-      responseSample: {
-        base: "USD",
-        rates: { EUR: 0.92, GBP: 0.77, JPY: 152.4 }
-      }
-    }
-  },
-  {
-    id: 'weather',
-    name: 'Weather & Multi-day Forecast',
-    category: 'weather',
-    url: '/v1/weather',
-    path: '/v1/weather',
-    method: 'POST',
-    description: 'Current meteorological conditions and 3-day forecast for any coordinates via Open-Meteo.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '50000', // 0.05 USDC
-    priceUsdc: 0.05,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { latitude: 37.7749, longitude: -122.4194 },
-    schema: {
-      request: {
-        latitude: { type: 'number', required: true, description: 'Latitude coordinate' },
-        longitude: { type: 'number', required: true, description: 'Longitude coordinate' }
-      },
-      responseSample: {
-        current: { temperature_c: 18.5, humidity_percent: 62 },
-        forecast_daily: [{ date: "2026-10-31", max_temp_c: 21.0 }]
-      }
-    }
-  },
-  {
-    id: 'geocode',
-    name: 'Geocoding & Reverse Lookup',
-    category: 'geo',
-    url: '/v1/geocode',
-    path: '/v1/geocode',
-    method: 'POST',
-    description: 'Forward place-name geocoding to GPS coordinates and administrative boundaries via Photon / OSM.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '40000', // 0.04 USDC
-    priceUsdc: 0.04,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { query: 'Coinbase Headquarters San Francisco' },
-    schema: {
-      request: {
-        query: { type: 'string', required: true, description: 'Location, city, address or landmark' }
-      },
-      responseSample: {
-        features: [{ name: "San Francisco", country: "United States", coordinates: { latitude: 37.7749, longitude: -122.4194 } }]
-      }
-    }
-  },
-  {
-    id: 'holidays',
-    name: 'Public Holidays Registry',
-    category: 'knowledge',
-    url: '/v1/holidays',
-    path: '/v1/holidays',
-    method: 'POST',
-    description: 'Official national and regional public holiday schedules and observance dates via Nager.Date.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '40000', // 0.04 USDC
-    priceUsdc: 0.04,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { countryCode: 'US', year: 2026 },
-    schema: {
-      request: {
-        countryCode: { type: 'string', required: true, description: 'ISO 2-letter country code' },
-        year: { type: 'number', required: false, description: 'Year (default: 2026)' }
-      },
-      responseSample: {
-        country_code: "US",
-        holidays: [{ date: "2026-07-04", name: "Independence Day", global: true }]
-      }
-    }
-  },
-  {
-    id: 'knowledge_search',
-    name: 'Wikidata Knowledge Entities',
-    category: 'knowledge',
-    url: '/v1/knowledge/search',
-    path: '/v1/knowledge/search',
-    method: 'POST',
-    description: 'Search structured Wikidata knowledge graph for canonical entities, Q-identifiers, and descriptions.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '60000', // 0.06 USDC
-    priceUsdc: 0.06,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { query: 'Base layer 2 network' },
-    schema: {
-      request: {
-        query: { type: 'string', required: true, description: 'Search term or entity name' }
-      },
-      responseSample: {
-        entities: [{ id: "Q117188880", label: "Base", description: "Ethereum Layer 2 network developed by Coinbase" }]
-      }
-    }
-  },
-  {
-    id: 'news_search',
-    name: 'Real-Time News Coverage',
-    category: 'news',
-    url: '/v1/news/search',
-    path: '/v1/news/search',
-    method: 'POST',
-    description: 'Live global news coverage and domain analysis with normalized publishing dates and sources.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '80000', // 0.08 USDC
-    priceUsdc: 0.08,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { query: 'Base network layer 2' },
-    schema: {
-      request: {
-        query: { type: 'string', required: true, description: 'Topic or keyword to monitor' }
-      },
-      responseSample: {
-        query: "Base network layer 2",
-        articles: [{ title: "Autonomous Agents Transacting on Base", source: "Decrypt" }]
-      }
-    }
-  },
-  {
-    id: 'research',
-    name: 'Deterministic Research Pack',
-    category: 'research',
-    url: '/v1/research',
-    path: '/v1/research',
-    method: 'POST',
-    description: 'Synthesizes multi-domain evidence (Academic + Wikidata + News) with full source provenance; no LLM hallucination.',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '100000', // 0.10 USDC
-    priceUsdc: 0.10,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { topic: 'zero knowledge rollups and micropayments' },
-    schema: {
-      request: {
-        topic: { type: 'string', required: true, description: 'Research subject or question' }
-      },
-      responseSample: {
-        provenance: { is_llm_hallucination: false, settlement_network: "Base" },
-        evidence: { scholarly_citations: [], wikidata_entities: [], recent_news: [] }
-      }
-    }
-  },
-  {
-    id: 'verify',
-    name: 'Deterministic Claim Verification',
-    category: 'research',
-    url: '/v1/verify',
-    path: '/v1/verify',
-    method: 'POST',
-    description: 'Verify claims against cross-referenced databases returning an explainable verdict (SUPPORTED, CONTRADICTED, MIXED).',
-    network: 'base',
-    chainId: 8453,
-    asset: BASE_USDC_MAINNET,
-    assetSymbol: 'USDC',
-    amount: '120000', // 0.12 USDC
-    priceUsdc: 0.12,
-    payTo: DEFAULT_TREASURY_ADDRESS,
-    defaultParams: { claim: 'Base is an Ethereum Layer 2 rollup developed by Coinbase' },
-    schema: {
-      request: {
-        claim: { type: 'string', required: true, description: 'Assertion or factual statement to verify' }
-      },
-      responseSample: {
-        verdict: "SUPPORTED",
-        heuristic_metrics: { confidence: 0.95, negation_cue_detected: false }
-      }
-    }
+const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/).refine(value => !/^0x0{40}$/i.test(value));
+const uint256 = z.string().refine(value => /^(0|[1-9][0-9]{0,77})$/.test(value) && BigInt(value) < (1n << 256n));
+const paymentSchema = PaymentPayloadV2Schema.omit({ extensions: true }).strict().extend({
+  accepted: PaymentRequirementsV2Schema.strict().extend({
+    scheme: z.literal('exact'), network: z.enum(['eip155:8453', 'eip155:84532']),
+    asset: address, payTo: address, amount: uint256,
+    maxTimeoutSeconds: z.literal(PAYMENT_TIMEOUT_SECONDS),
+    extra: z.object({ name: z.enum(['USD Coin', 'USDC']), version: z.literal('2') }).strict()
+  }),
+  payload: z.object({
+    signature: z.string().regex(/^0x(?:[0-9a-fA-F]{2}){1,4096}$/),
+    authorization: z.object({
+      from: address, to: address, value: uint256, validAfter: uint256, validBefore: uint256,
+      nonce: z.string().regex(/^0x[0-9a-fA-F]{64}$/)
+    }).strict()
+  }).strict()
+});
+
+const messages: Record<X402ErrorCode, string> = {
+  invalid_payment: 'Payment does not match the required signed authorization.',
+  payment_expired: 'Payment authorization has expired or is too close to expiry.',
+  payment_not_yet_valid: 'Payment authorization is not yet valid.',
+  payment_replayed: 'Payment authorization has already been used or cancelled.',
+  payment_configuration_error: 'Payment settlement is not configured correctly.',
+  payment_verification_unavailable: 'Payment verification is temporarily unavailable.',
+  settlement_failed: 'Payment settlement was not confirmed as successful.',
+  settlement_pending: 'Payment may have been submitted. Reconcile the transaction before paying again.',
+  settlement_in_progress: 'This authorization is already being settled. Do not pay again.'
+};
+class PaymentError extends Error {
+  constructor(readonly code: X402ErrorCode) { super(messages[code]); }
+}
+function failure(errorCode: X402ErrorCode, payer = '', amount = '0'): X402VerificationResult {
+  return { valid: false, payer, amount, errorCode, error: messages[errorCode] };
+}
+function reasonCode(reason?: string): X402ErrorCode {
+  if (reason === 'invalid_exact_evm_nonce_already_used') return 'payment_replayed';
+  if (reason === 'invalid_exact_evm_payload_authorization_valid_before') return 'payment_expired';
+  if (reason === 'invalid_exact_evm_payload_authorization_valid_after') return 'payment_not_yet_valid';
+  if (reason === 'invalid_exact_evm_failed_to_verify_signature' || reason === 'invalid_exact_evm_transaction_simulation_failed') {
+    return 'payment_verification_unavailable';
   }
-];
-
-export function generate402Challenge(resource: X402Resource, network: 'base' | 'base-sepolia' = 'base'): X402Challenge {
-  // Generate 32-byte hex nonce (64 hex characters) matching bytes32
-  const nonce = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-  const validBefore = Math.floor(Date.now() / 1000) + 3600; // 1 hour validity
-
+  return 'invalid_payment';
+}
+function resourceUrl(resource: X402Resource, origin = process.env.GATEWAY_ORIGIN ?? 'https://relayx402.vercel.app'): string {
+  const url = new URL(resource.url, origin);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) {
+    throw new PaymentError('payment_configuration_error');
+  }
+  return url.href;
+}
+function requirementsFor(resource: X402Resource): X402PaymentRequirements {
+  const isBase = resource.network === 'base';
+  const asset = isBase ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA;
+  if ((!isBase && resource.network !== 'base-sepolia') ||
+      resource.chainId !== (isBase ? base.id : baseSepolia.id) ||
+      resource.asset.toLowerCase() !== asset.toLowerCase() ||
+      !address.safeParse(resource.payTo).success || !uint256.safeParse(resource.amount).success || BigInt(resource.amount) === 0n) {
+    throw new PaymentError('payment_configuration_error');
+  }
   return {
-    x402Version: 2,
-    error: 'Payment Required',
-    message: `Payment of ${(Number(resource.amount) / 1000000).toFixed(2)} USDC on ${network.toUpperCase()} is required to access ${resource.name}.`,
-    paymentRequirements: {
-      scheme: 'transferWithAuthorization',
-      network,
-      chainId: network === 'base' ? 8453 : 84532,
-      tokenAddress: network === 'base' ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA,
-      tokenSymbol: 'USDC',
-      amount: resource.amount,
-      amountFormatted: `${(Number(resource.amount) / 1000000).toFixed(2)} USDC`,
-      payTo: resource.payTo,
-      nonce,
-      validBefore,
-      resource: resource.path
-    }
+    scheme: 'exact', network: isBase ? 'eip155:8453' : 'eip155:84532',
+    asset, amount: resource.amount, payTo: getAddress(resource.payTo),
+    maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS,
+    extra: { name: isBase ? 'USD Coin' : 'USDC', version: '2' }
   };
 }
 
+export function generate402Challenge(resource: X402Resource, network: RelayNetwork = resource.network, origin?: string): X402Challenge {
+  const selected = network === resource.network ? resource : {
+    ...resource, network, chainId: network === 'base' ? base.id : baseSepolia.id,
+    asset: network === 'base' ? BASE_USDC_MAINNET : BASE_USDC_SEPOLIA
+  };
+  return {
+    x402Version: 2, error: 'Payment Required',
+    resource: { url: resourceUrl(resource, origin), description: resource.description, mimeType: 'application/json' },
+    accepts: [requirementsFor(selected)]
+  };
+}
 
-export const USDC_ERC3009_ABI = [
-  {
-    inputs: [
-      { name: 'from', type: 'address' },
-      { name: 'to', type: 'address' },
-      { name: 'value', type: 'uint256' },
-      { name: 'validAfter', type: 'uint256' },
-      { name: 'validBefore', type: 'uint256' },
-      { name: 'nonce', type: 'bytes32' },
-      { name: 'v', type: 'uint8' },
-      { name: 'r', type: 'bytes32' },
-      { name: 's', type: 'bytes32' }
-    ],
-    name: 'receiveWithAuthorization',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  },
-  {
-    inputs: [
-      { name: 'from', type: 'address' },
-      { name: 'to', type: 'address' },
-      { name: 'value', type: 'uint256' },
-      { name: 'validAfter', type: 'uint256' },
-      { name: 'validBefore', type: 'uint256' },
-      { name: 'nonce', type: 'bytes32' },
-      { name: 'v', type: 'uint8' },
-      { name: 'r', type: 'bytes32' },
-      { name: 's', type: 'bytes32' }
-    ],
-    name: 'transferWithAuthorization',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  }
-] as const;
-
-export async function broadcastOnChainTransferWithAuthorization(params: {
-  tokenAddress: Address;
-  from: Address;
-  to: Address;
-  value: bigint;
-  validAfter: bigint;
-  validBefore: bigint;
-  nonce: Hex;
-  signature: Hex;
-}): Promise<{ attempted: boolean; success: boolean; txHash?: string; error?: string }> {
-  const facilitatorKey = (typeof process !== 'undefined' && (process.env?.RELAY_FACILITATOR_KEY || process.env?.AGENT_PRIVATE_KEY)) || '';
-  if (!facilitatorKey) {
-    return { attempted: false, success: false, error: 'No facilitator key configured' };
-  }
-
+function validateProof(input: unknown, resource: X402Resource):
+  { proof: X402PaymentProof; requirements: X402PaymentRequirements } | X402VerificationResult {
+  const parsed = paymentSchema.safeParse(input);
+  if (!parsed.success) return failure('invalid_payment');
+  const proof = parsed.data as X402PaymentProof;
+  const auth = proof.payload.authorization;
   try {
-    const cleanKey = facilitatorKey.startsWith('0x') ? facilitatorKey as Hex : `0x${facilitatorKey}` as Hex;
-    const account = privateKeyToAccount(cleanKey);
-    const rpcUrl = (typeof process !== 'undefined' && process.env?.BASE_RPC_URL) || 'https://mainnet.base.org';
-    const client = createWalletClient({
-      account,
-      chain: base,
-      transport: http(rpcUrl)
-    });
-
-    const parsedSig = parseSignature(params.signature);
-    const v = Number(parsedSig.v ?? (parsedSig.yParity === 0 ? 27 : 28));
-
-    try {
-      const hash = await client.writeContract({
-        address: params.tokenAddress,
-        abi: USDC_ERC3009_ABI,
-        functionName: 'receiveWithAuthorization',
-        args: [
-          params.from,
-          params.to,
-          params.value,
-          params.validAfter,
-          params.validBefore,
-          params.nonce,
-          v,
-          parsedSig.r,
-          parsedSig.s
-        ]
-      });
-      return { attempted: true, success: true, txHash: hash };
-    } catch (rxErr: any) {
-      try {
-        const hash = await client.writeContract({
-          address: params.tokenAddress,
-          abi: USDC_ERC3009_ABI,
-          functionName: 'transferWithAuthorization',
-          args: [
-            params.from,
-            params.to,
-            params.value,
-            params.validAfter,
-            params.validBefore,
-            params.nonce,
-            v,
-            parsedSig.r,
-            parsedSig.s
-          ]
-        });
-        return { attempted: true, success: true, txHash: hash };
-      } catch (fallbackErr: any) {
-        return { attempted: true, success: false, error: fallbackErr.message || rxErr.message };
-      }
+    const requirements = requirementsFor(resource);
+    const accepted = proof.accepted;
+    if (accepted.network !== requirements.network || accepted.scheme !== requirements.scheme ||
+        accepted.asset.toLowerCase() !== requirements.asset.toLowerCase() ||
+        accepted.payTo.toLowerCase() !== requirements.payTo.toLowerCase() ||
+        accepted.amount !== requirements.amount || auth.value !== requirements.amount ||
+        auth.to.toLowerCase() !== requirements.payTo.toLowerCase() ||
+        accepted.extra.name !== requirements.extra.name || accepted.extra.version !== requirements.extra.version ||
+        (proof.resource && proof.resource.url !== resourceUrl(resource))) {
+      return failure('invalid_payment', auth.from, resource.amount);
     }
-  } catch (err: any) {
-    return { attempted: true, success: false, error: err.message };
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    if (BigInt(auth.validBefore) < now + 6n) return failure('payment_expired', auth.from, resource.amount);
+    if (BigInt(auth.validAfter) >= now) return failure('payment_not_yet_valid', auth.from, resource.amount);
+    if (BigInt(auth.validBefore) > now + BigInt(PAYMENT_TIMEOUT_SECONDS) || BigInt(auth.validBefore) <= BigInt(auth.validAfter)) {
+      return failure('invalid_payment', auth.from, resource.amount);
+    }
+    return { proof, requirements };
+  } catch (error) {
+    return failure(error instanceof PaymentError ? error.code : 'payment_configuration_error', auth.from, resource.amount);
   }
 }
 
-export async function verifyPaymentProof(
-  proof: X402PaymentProof,
-  resource: X402Resource,
-  challenge?: X402Challenge
-): Promise<X402VerificationResult> {
-  if (!proof || !proof.payerAddress) {
-    return { valid: false, payer: '', amount: '0', error: 'Missing payment proof or payer address' };
+const settlementEvents = parseAbi([
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+  'event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)'
+]);
+const inFlight = new Set<string>();
+const pending = new Map<string, { txHash: Hex; expiresAt: number }>();
+const nonceQueues = new Map<string, Promise<void>>();
+function authorizationKey(proof: X402PaymentProof): string {
+  const auth = proof.payload.authorization;
+  return `${proof.accepted.network}:${proof.accepted.asset}:${auth.from}:${auth.nonce}`.toLowerCase();
+}
+function pendingFor(key: string) {
+  for (const [id, entry] of pending) if (entry.expiresAt < Date.now()) pending.delete(id);
+  return pending.get(key);
+}
+async function serializeSend<T>(key: string, send: () => Promise<T>): Promise<T> {
+  const previous = nonceQueues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const tail = previous.then(() => gate);
+  nonceQueues.set(key, tail);
+  await previous;
+  try { return await send(); }
+  finally {
+    release();
+    if (nonceQueues.get(key) === tail) nonceQueues.delete(key);
   }
+}
 
-  // 1. Check expiration timestamp
-  const now = Date.now();
-  if (proof.timestamp && (now - proof.timestamp > 3600000)) {
-    return { valid: false, payer: proof.payerAddress, amount: '0', error: 'Payment authorization expired' };
-  }
-
-  // 2. Cryptographic signature check if clientSignature is present
-  if (proof.clientSignature && proof.clientSignature.startsWith('0x')) {
-    try {
-      const auth = proof.authorization;
-      const validBefore = auth?.validBefore
-        ? BigInt(auth.validBefore)
-        : BigInt(Math.floor(Date.now() / 1000) + 3600);
-      const value = auth?.value ? BigInt(auth.value) : BigInt(resource.amount);
-      const nonceRaw = auth?.nonce || challenge?.paymentRequirements.nonce || '0x0';
-      const nonce = nonceRaw.startsWith('0x') && nonceRaw.length === 66
-        ? (nonceRaw as Hex)
-        : (`0x${nonceRaw.replace(/^0x/, '').padStart(64, '0')}` as Hex);
-
-      const domain = {
-        name: 'USD Coin',
-        version: '2',
-        chainId: resource.chainId,
-        verifyingContract: getAddress(resource.asset)
-      } as const;
-
-      const message = {
-        from: getAddress(proof.payerAddress),
-        to: getAddress(resource.payTo),
-        value,
-        validAfter: 0n,
-        validBefore,
-        nonce
-      };
-
-      const recoveredAddress = await recoverTypedDataAddress({
-        domain,
-        types: EIP712_TRANSFER_TYPES,
-        primaryType: 'TransferWithAuthorization',
-        message,
-        signature: proof.clientSignature as Hex
-      });
-
-      if (recoveredAddress.toLowerCase() !== proof.payerAddress.toLowerCase()) {
-        return {
-          valid: false,
-          payer: proof.payerAddress,
-          amount: '0',
-          error: `Cryptographic EIP-712 verification failed: recovered ${recoveredAddress} does not match payer ${proof.payerAddress}`
-        };
-      }
-
-      // Check authorized amount
-      if (value < BigInt(resource.amount)) {
-        return {
-          valid: false,
-          payer: proof.payerAddress,
-          amount: value.toString(),
-          error: `Insufficient authorized amount: authorized ${value.toString()} micro-USDC, requires ${resource.amount}`
-        };
-      }
-
-      // On-chain ERC-3009 broadcast attempt
-      let settledTxHash: string = proof.txHash || '';
-      let broadcastResult: { attempted: boolean; success: boolean; txHash?: string; error?: string } | undefined = undefined;
-
-      if (!settledTxHash && proof.clientSignature) {
-        try {
-          broadcastResult = await broadcastOnChainTransferWithAuthorization({
-            tokenAddress: getAddress(resource.asset),
-            from: getAddress(proof.payerAddress),
-            to: getAddress(resource.payTo),
-            value,
-            validAfter: 0n,
-            validBefore,
-            nonce,
-            signature: proof.clientSignature as Hex
-          });
-          if (broadcastResult.success && broadcastResult.txHash) {
-            settledTxHash = broadcastResult.txHash;
-          }
-        } catch {
-          // Continue with off-chain receipt
-        }
-      }
-
-      if (!settledTxHash) {
-        settledTxHash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-      }
-
-      return {
-        valid: true,
-        payer: proof.payerAddress,
-        amount: resource.amount,
-        txHash: settledTxHash,
-        onChainBroadcast: broadcastResult,
-        settledAt: new Date().toISOString()
-      };
-    } catch (e: any) {
-      return {
-        valid: false,
-        payer: proof.payerAddress,
-        amount: '0',
-        error: `Signature recovery exception: ${e.message}`
-      };
+function createFacilitator(resource: X402Resource, proof: X402PaymentProof, attempt?: { txHash?: Hex }) {
+  const key = process.env.RELAY_FACILITATOR_KEY;
+  const normalizedKey = key?.startsWith('0x') ? key : `0x${key ?? ''}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(normalizedKey)) throw new PaymentError('payment_configuration_error');
+  let account;
+  try { account = privateKeyToAccount(normalizedKey as Hex); }
+  catch { throw new PaymentError('payment_configuration_error'); }
+  const chain = resource.network === 'base' ? base : baseSepolia;
+  const rpcUrl = process.env.BASE_RPC_URL ?? chain.rpcUrls.default.http[0];
+  const timeout = Number(process.env.RELAY_SETTLEMENT_TIMEOUT_MS ?? 15000);
+  try {
+    if (!['https:', 'http:'].includes(new URL(rpcUrl).protocol) || !Number.isInteger(timeout) || timeout < 100 || timeout > 30000) {
+      throw new Error();
     }
-  }
-
-  // Fallback for direct txHash onchain proof
-  return {
-    valid: true,
-    payer: proof.payerAddress,
-    amount: resource.amount,
-    txHash: proof.txHash || `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-    settledAt: new Date().toISOString()
+  } catch { throw new PaymentError('payment_configuration_error'); }
+  const transport = http(rpcUrl, { timeout: 5000, retryCount: 0 });
+  const publicClient = createPublicClient({ chain, transport });
+  const walletClient = createWalletClient({ chain, account, transport });
+  const auth = proof.payload.authorization;
+  const token = getAddress(resource.asset);
+  const signer: FacilitatorEvmSigner = {
+    getAddresses: () => [account.address],
+    getCode: args => publicClient.getCode(args),
+    readContract: args => publicClient.readContract({ ...args, abi: args.abi as Abi, account: args.account ?? account.address }),
+    verifyTypedData: args => publicClient.verifyTypedData(args as Parameters<typeof publicClient.verifyTypedData>[0]),
+    sendTransaction: async () => { throw new PaymentError('invalid_payment'); },
+    writeContract: async args => {
+      if (!attempt || args.functionName !== 'transferWithAuthorization' || args.address.toLowerCase() !== token.toLowerCase()) {
+        throw new PaymentError('invalid_payment');
+      }
+      return serializeSend(`${chain.id}:${account.address}`, async () => {
+        // A unique transaction per attempt prevents two replicas claiming the same mined tx.
+        // Cross-instance nonce allocation still requires a dedicated/shared signer for throughput.
+        const data = `${encodeFunctionData({ abi: args.abi as Abi, functionName: args.functionName, args: args.args })}${randomBytes(16).toString('hex')}` as Hex;
+        const request = await walletClient.prepareTransactionRequest({ account, chain, type: 'eip1559', to: token, data, gas: args.gas });
+        const serialized = await account.signTransaction({
+          type: 'eip1559', chainId: chain.id, to: token, data,
+          nonce: request.nonce, gas: request.gas,
+          maxFeePerGas: request.maxFeePerGas, maxPriorityFeePerGas: request.maxPriorityFeePerGas
+        });
+        attempt.txHash = keccak256(serialized);
+        const returnedHash = await walletClient.sendRawTransaction({ serializedTransaction: serialized });
+        if (returnedHash.toLowerCase() !== attempt.txHash.toLowerCase()) throw new PaymentError('settlement_pending');
+        return attempt.txHash;
+      });
+    },
+    waitForTransactionReceipt: async ({ hash }) => {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 2, timeout, pollingInterval: 1000, checkReplacement: false });
+      // Never follow a replaced transaction into another request's success.
+      if (receipt.transactionHash.toLowerCase() !== hash.toLowerCase() || !Array.isArray(receipt.logs)) {
+        throw new PaymentError('settlement_pending');
+      }
+      if (receipt.status === 'success') {
+        const logs = receipt.logs.filter(log => log.address.toLowerCase() === token.toLowerCase());
+        const transfers = parseEventLogs({ abi: settlementEvents, eventName: 'Transfer', logs });
+        const authorizations = parseEventLogs({ abi: settlementEvents, eventName: 'AuthorizationUsed', logs });
+        const transferred = transfers.some(log => log.args.from.toLowerCase() === auth.from.toLowerCase() &&
+          log.args.to.toLowerCase() === auth.to.toLowerCase() && log.args.value === BigInt(auth.value));
+        const consumed = authorizations.some(log => log.args.authorizer.toLowerCase() === auth.from.toLowerCase() &&
+          log.args.nonce.toLowerCase() === auth.nonce.toLowerCase());
+        const nonceUsed = await publicClient.readContract({ address: token, abi: eip3009ABI,
+          functionName: 'authorizationState', args: [getAddress(auth.from), auth.nonce as Hex], blockNumber: receipt.blockNumber });
+        if (!transferred || !consumed || nonceUsed !== true) throw new PaymentError('settlement_pending');
+      }
+      return receipt;
+    }
   };
+  // Each request owns its scheme. A pending-store hit must never turn a replay into success.
+  const scheme = new ExactEvmScheme(signer, { simulateInSettle: true });
+  return { publicClient, scheme, chain };
+}
+
+async function verifyOnChain(context: ReturnType<typeof createFacilitator>, proof: X402PaymentProof,
+  requirements: X402PaymentRequirements): Promise<X402VerificationResult> {
+  const auth = proof.payload.authorization;
+  if (await context.publicClient.getChainId() !== context.chain.id) throw new PaymentError('payment_configuration_error');
+  const used = await context.publicClient.readContract({ address: getAddress(requirements.asset), abi: eip3009ABI,
+    functionName: 'authorizationState', args: [getAddress(auth.from), auth.nonce as Hex] });
+  if (used === true) return failure('payment_replayed', auth.from, requirements.amount);
+  if (used !== false) throw new PaymentError('payment_verification_unavailable');
+  const result = await context.scheme.verify(proof, requirements);
+  return result.isValid
+    ? { valid: true, payer: auth.from, amount: requirements.amount }
+    : failure(reasonCode(result.invalidReason), auth.from, requirements.amount);
+}
+
+export async function verifyPaymentProof(input: unknown, resource: X402Resource): Promise<X402VerificationResult> {
+  const checked = validateProof(input, resource);
+  if (!('proof' in checked)) return checked;
+  const { proof, requirements } = checked;
+  const key = authorizationKey(proof);
+  const existing = pendingFor(key);
+  if (existing) return { ...failure('settlement_pending', proof.payload.authorization.from, resource.amount), txHash: existing.txHash };
+  if (inFlight.has(key)) return failure('settlement_in_progress', proof.payload.authorization.from, resource.amount);
+  try {
+    return await verifyOnChain(createFacilitator(resource, proof), proof, requirements);
+  } catch (error) {
+    return failure(error instanceof PaymentError ? error.code : 'payment_verification_unavailable', proof.payload.authorization.from, resource.amount);
+  }
+}
+
+export async function settlePaymentProof(input: unknown, resource: X402Resource): Promise<X402SettlementResult> {
+  const checked = validateProof(input, resource);
+  if (!('proof' in checked)) return checked;
+  const { proof, requirements } = checked;
+  const auth = proof.payload.authorization;
+  const key = authorizationKey(proof);
+  const existing = pendingFor(key);
+  if (existing) return { ...failure('settlement_pending', auth.from, resource.amount), txHash: existing.txHash, network: requirements.network };
+  if (inFlight.has(key)) return failure('settlement_in_progress', auth.from, resource.amount);
+  inFlight.add(key);
+  const attempt: { txHash?: Hex } = {};
+  let result: X402SettlementResult;
+  try {
+    const context = createFacilitator(resource, proof, attempt);
+    const verified = await verifyOnChain(context, proof, requirements);
+    if (!verified.valid) return verified;
+    const settled = await context.scheme.settle(proof, requirements);
+    if (settled.success && attempt.txHash && settled.transaction.toLowerCase() === attempt.txHash.toLowerCase()) {
+      return { valid: true, payer: auth.from, amount: requirements.amount,
+        txHash: attempt.txHash, settledAt: new Date().toISOString(), network: requirements.network };
+    }
+    const code = settled.errorReason === 'settlement_pending' || (attempt.txHash && !settled.transaction)
+      ? 'settlement_pending' : settled.errorReason === 'invalid_exact_evm_nonce_already_used' ? 'payment_replayed' : 'settlement_failed';
+    result = { ...failure(code, auth.from, resource.amount), txHash: attempt.txHash, network: requirements.network };
+  } catch (error) {
+    result = { ...failure(attempt.txHash ? 'settlement_pending' : error instanceof PaymentError ? error.code : 'settlement_failed', auth.from, resource.amount),
+      txHash: attempt.txHash, network: requirements.network };
+  } finally {
+    inFlight.delete(key);
+  }
+  if (result.errorCode === 'settlement_pending' && attempt.txHash) {
+    pending.set(key, { txHash: attempt.txHash, expiresAt: Number(auth.validBefore) * 1000 + 60000 });
+  }
+  return result;
 }
 
 export async function dispatchResourceRequest(resourceId: string, params: Record<string, any>) {
   switch (resourceId) {
-    case 'academic_search':
-      return await providers.fetchAcademicSearch(params.query || 'blockchain', params.limit || 3);
-    case 'academic_work':
-      return await providers.fetchAcademicWork(params.doi || '10.1038/s41586-020-2649-2');
-    case 'crypto_price':
-      return await providers.fetchCryptoPrice(params.assets || ['ethereum', 'bitcoin'], params.vsCurrency || 'usd');
-    case 'crypto_market':
-      return await providers.fetchCryptoMarket(params.assets || ['ethereum', 'bitcoin']);
-    case 'fx_rates':
-      return await providers.fetchFxRates(params.baseCurrency || 'USD', params.targets || ['EUR', 'GBP', 'JPY']);
-    case 'weather':
-      return await providers.fetchWeather(params.latitude || 37.7749, params.longitude || -122.4194);
-    case 'geocode':
-      return await providers.fetchGeocode(params.query || 'San Francisco');
-    case 'holidays':
-      return await providers.fetchHolidays(params.countryCode || 'US', params.year || 2026);
-    case 'knowledge_search':
-      return await providers.fetchKnowledgeSearch(params.query || 'Base layer 2');
-    case 'news_search':
-      return await providers.fetchNewsSearch(params.query || 'Base ecosystem');
-    case 'research':
-      return await providers.fetchResearchPack(params.topic || 'layer 2 state channels');
-    case 'verify':
-      return await providers.fetchVerifyClaim(params.claim || 'Base is an Ethereum Layer 2 rollup');
-    case 'health':
-      return await providers.getProvidersHealth();
-    default:
-      throw new Error(`Unknown resource ID: ${resourceId}`);
+    case 'academic_search': return providers.fetchAcademicSearch(params.query, params.limit ?? 3);
+    case 'academic_work': return providers.fetchAcademicWork(params.doi);
+    case 'crypto_price': return providers.fetchCryptoPrice(params.assets, params.vsCurrency ?? 'usd');
+    case 'crypto_market': return providers.fetchCryptoMarket(params.assets);
+    case 'fx_rates': return providers.fetchFxRates(params.baseCurrency ?? 'USD', params.targets ?? ['EUR', 'GBP', 'JPY']);
+    case 'weather': return providers.fetchWeather(params.latitude, params.longitude);
+    case 'geocode': return providers.fetchGeocode(params.query);
+    case 'holidays': return providers.fetchHolidays(params.countryCode, params.year ?? new Date().getUTCFullYear());
+    case 'knowledge_search': return providers.fetchKnowledgeSearch(params.query);
+    case 'news_search': return providers.fetchNewsSearch(params.query);
+    case 'research': return providers.fetchResearchPack(params.topic);
+    case 'verify': return providers.fetchVerifyClaim(params.claim);
+    case 'health': return providers.getProvidersHealth();
+    default: throw new Error(`Unknown resource ID: ${resourceId}`);
   }
 }
 
-export function getWellKnownManifest(origin: string = 'https://relayx402.vercel.app'): WellKnownX402Manifest {
+export function getWellKnownManifest(origin?: string): WellKnownX402Manifest {
   return {
-    x402Version: 2,
-    name: 'Relay',
-    description: 'Pay-per-use information infrastructure for AI agents and developers: every capability is paid per request in USDC on Base via the x402 protocol.',
-    network: 'base',
-    chainId: 8453,
-    facilitator: 'Relay x402 Gateway (Coinbase CDP / Base Native)',
-    resources: RELAY_RESOURCES.map(r => ({
-      url: `${origin}${r.path}`,
-      method: r.method,
-      description: `${r.description} - ${(Number(r.amount) / 1000000).toFixed(2)} USDC per call.`,
-      network: `eip155:8453`,
-      asset: r.asset,
-      amount: r.amount,
-      payTo: r.payTo
+    x402Version: 2, name: 'Relay',
+    description: 'Pay-per-use information retrieval with confirmed USDC payments using x402 v2 exact.',
+    network: configuredNetwork === 'base' ? 'eip155:8453' : 'eip155:84532',
+    chainId: configuredNetwork === 'base' ? base.id : baseSepolia.id,
+    facilitator: 'Relay self-hosted @x402/evm facilitator',
+    resources: RELAY_RESOURCES.map(resource => ({
+      ...requirementsFor(resource), url: resourceUrl(resource, origin), method: resource.method,
+      description: resource.description, mimeType: 'application/json'
     }))
   };
 }

@@ -2,10 +2,11 @@ import {
   RELAY_RESOURCES,
   generate402Challenge,
   verifyPaymentProof,
+  settlePaymentProof,
   dispatchResourceRequest,
   getWellKnownManifest
 } from './x402Engine';
-import { X402PaymentProof } from '../types/x402';
+import { MAX_REQUEST_BYTES, validateResourceParams } from '../shared/validation';
 
 export interface GatewayResponse {
   status: number;
@@ -13,234 +14,169 @@ export interface GatewayResponse {
   body: any;
 }
 
-/**
- * Core wire protocol handler for Relay x402 endpoints
- */
+export interface GatewayDependencies {
+  verify: typeof verifyPaymentProof;
+  settle: typeof settlePaymentProof;
+  dispatch: typeof dispatchResourceRequest;
+}
+
+export const GATEWAY_HEADERS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, PAYMENT-SIGNATURE',
+  'Access-Control-Expose-Headers': 'PAYMENT-REQUIRED, PAYMENT-RESPONSE',
+  'X-Content-Type-Options': 'nosniff',
+  'Cache-Control': 'no-store'
+};
+
+const defaults: GatewayDependencies = { verify: verifyPaymentProof, settle: settlePaymentProof, dispatch: dispatchResourceRequest };
+const unavailableCodes = new Set(['payment_configuration_error', 'payment_verification_unavailable', 'settlement_pending', 'settlement_in_progress']);
+const healthPaths = new Set(['/health', '/v1/health', '/api/health', '/api/v1/health', '/.well-known/health']);
+
+export function isGatewayPath(path: string): boolean {
+  const clean = path.split('?')[0].replace(/\/+$/, '');
+  return clean === '/api/v1' || clean.startsWith('/v1/') || clean.startsWith('/api/v1/') ||
+    clean === '/.well-known/x402' || clean === '/.well-known/x402.json' || clean === '/api/well-known/x402' || healthPaths.has(clean);
+}
+
 export async function handleGatewayRequest(
   method: string,
   pathname: string,
   headers: Record<string, string | string[] | undefined>,
-  rawBody: any,
-  origin: string = (typeof process !== 'undefined' && process.env?.GATEWAY_ORIGIN) ||
-    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GATEWAY_URL) ||
-    'https://relayx402.vercel.app'
+  rawBody: unknown,
+  origin = process.env.GATEWAY_ORIGIN || 'https://relayx402.vercel.app',
+  dependencies: GatewayDependencies = defaults
 ): Promise<GatewayResponse> {
-  // Normalize pathname
-  const cleanPath = pathname.split('?')[0].replace(/\/+$/, '');
-
-  // 1. Well-known machine discovery manifest
-  if (cleanPath === '/.well-known/x402' || cleanPath === '/.well-known/x402.json') {
-    return {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600'
-      },
-      body: getWellKnownManifest(origin)
-    };
-  }
-
-  // 1b. Live Gateway Health & Provider Telemetry (Free / Unchallenged)
-  if (cleanPath === '/health' || cleanPath === '/v1/health' || cleanPath === '/api/health' || cleanPath === '/api/v1/health' || cleanPath === '/.well-known/health') {
-    const healthData = await dispatchResourceRequest('health', {});
-    return {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'no-cache'
-      },
-      body: healthData
-    };
-  }
-
-  // 2. Locate endpoint in registry
-  const normalizedRoute = cleanPath.replace(/^\/api/, '');
-  const resource = RELAY_RESOURCES.find(r => r.path === normalizedRoute || r.url === normalizedRoute);
-
-  if (!resource) {
-    return {
-      status: 404,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: {
-        error: 'Not Found',
-        message: `Endpoint ${cleanPath} not found in Relay x402 registry. Consult /.well-known/x402 for available endpoints.`
-      }
-    };
-  }
-
-  // CORS preflight
-  if (method === 'OPTIONS') {
-    return {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Payment-Proof, X-Payer-Address, Authorization'
-      },
-      body: null
-    };
-  }
-
-  // Parse body
-  let parsedParams: Record<string, any> = {};
-  if (rawBody) {
-    if (typeof rawBody === 'string') {
-      try {
-        parsedParams = JSON.parse(rawBody);
-      } catch {
-        parsedParams = {};
-      }
-    } else if (typeof rawBody === 'object') {
-      parsedParams = rawBody;
-    }
-  }
-
-  // 3. Check for X402 Payment Proof
-  const proofHeader = headers['x-payment-proof'] || headers['X-Payment-Proof'] || headers['authorization'] || headers['Authorization'];
-  const payerHeader = headers['x-payer-address'] || headers['X-Payer-Address'];
-
-  // If no proof is provided: Return HTTP 402 Challenge
-  if (!proofHeader) {
-    const challenge = generate402Challenge(resource, 'base');
-    return {
-      status: 402,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'WWW-Authenticate, X-402-Cost, X-402-Payee, X-402-Token',
-        'WWW-Authenticate': `X402 scheme="transferWithAuthorization", token="${resource.asset}", amount="${resource.amount}", payee="${resource.payTo}", chainId="${resource.chainId}"`,
-        'X-402-Cost': `${resource.priceUsdc} USDC`,
-        'X-402-Payee': resource.payTo,
-        'X-402-Token': resource.asset
-      },
-      body: challenge
-    };
-  }
-
-  // Parse payment proof
-  let proofObj: X402PaymentProof = {
-    scheme: 'transferWithAuthorization',
-    payerAddress: '0x0000000000000000000000000000000000000000',
-    timestamp: Date.now()
+  const respond = (status: number, body: any, extra: Record<string, string> = {}): GatewayResponse => ({ status, headers: { ...GATEWAY_HEADERS, ...extra }, body });
+  const header = (name: string) => {
+    const values = Object.entries(headers).filter(([key]) => key.toLowerCase() === name.toLowerCase()).map(([, value]) => value);
+    if (values.length > 1 || Array.isArray(values[0])) throw new Error(`Duplicate ${name} header.`);
+    return values[0] as string | undefined;
   };
-  let rawStr = (Array.isArray(proofHeader) ? proofHeader[0] : proofHeader).trim();
-  const payerStr = Array.isArray(payerHeader) ? payerHeader[0] : payerHeader;
+  const cleanPath = pathname.split('?')[0].replace(/\/+$/, '');
+  const discovery = ['/.well-known/x402', '/.well-known/x402.json', '/api/well-known/x402'].includes(cleanPath);
+  const health = healthPaths.has(cleanPath);
+  const matchedResource = RELAY_RESOURCES.find(candidate => candidate.path === cleanPath.replace(/^\/api(?=\/v1\/)/, ''));
+  const resource = matchedResource ? { ...matchedResource, url: new URL(cleanPath, origin).href } : undefined;
+  if (!discovery && !health && !resource) return respond(404, { error: 'Not Found', message: 'Consult /.well-known/x402 for available endpoints.' });
 
-  // Strip optional 'Bearer ' or 'x402 ' prefix
-  if (rawStr.toLowerCase().startsWith('bearer ')) {
-    rawStr = rawStr.slice(7).trim();
-  } else if (rawStr.toLowerCase().startsWith('x402 ')) {
-    rawStr = rawStr.slice(5).trim();
+  const allowedMethods = resource ? `${resource.method}, OPTIONS` : 'GET, HEAD, OPTIONS';
+  if (method === 'OPTIONS') return respond(204, null, { 'Access-Control-Allow-Methods': allowedMethods, 'Access-Control-Max-Age': '600' });
+  if (resource ? method !== resource.method : method !== 'GET' && method !== 'HEAD') {
+    return respond(405, { error: 'Method Not Allowed' }, { Allow: allowedMethods, 'Access-Control-Allow-Methods': allowedMethods });
   }
-
-  // Decode URI-encoding if present
-  if (rawStr.startsWith('%7B') || rawStr.startsWith('%7b')) {
+  if (discovery) return respond(200, method === 'HEAD' ? null : getWellKnownManifest(origin), { 'Cache-Control': 'public, max-age=300' });
+  if (health) {
     try {
-      rawStr = decodeURIComponent(rawStr);
+      const result = await dependencies.dispatch('health', {});
+      const operational = result && typeof result === 'object' && 'status' in result && result.status === 'operational';
+      return respond(operational ? 200 : 503, method === 'HEAD' ? null : result);
     } catch {
-      // Continue with raw
+      return respond(503, { status: 'degraded', error: 'Provider health checks unavailable.' });
     }
   }
+  if (!resource) return respond(404, { error: 'Not Found' });
 
+  let params: Record<string, any>;
+  let encodedProof: string | undefined;
   try {
-    if (rawStr.startsWith('{')) {
-      proofObj = JSON.parse(rawStr);
-    } else {
-      // Try decoding base64 JSON payload
-      let parsedFromB64 = false;
-      try {
-        if (typeof Buffer !== 'undefined') {
-          const b64Decoded = Buffer.from(rawStr, 'base64').toString('utf-8');
-          if (b64Decoded.trim().startsWith('{')) {
-            proofObj = JSON.parse(b64Decoded);
-            parsedFromB64 = true;
-          }
-        }
-      } catch {
-        parsedFromB64 = false;
-      }
+    const length = header('content-length');
+    if (length && (!/^\d+$/.test(length) || Number(length) > MAX_REQUEST_BYTES)) {
+      return respond(413, { error: 'Request Too Large', message: `Maximum request body is ${MAX_REQUEST_BYTES} bytes.` });
+    }
+    if (header('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      return respond(415, { error: 'Unsupported Media Type', message: 'Send Content-Type: application/json.' });
+    }
+    const serialized = typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody === undefined ? {} : rawBody);
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_REQUEST_BYTES) return respond(413, { error: 'Request Too Large' });
+    params = validateResourceParams(resource, serialized ? JSON.parse(serialized) : {});
+    encodedProof = header('payment-signature');
+    if (['authorization', 'x-payment-proof', 'x-payment', 'x-payer-address'].some(name => header(name) !== undefined)) {
+      return respond(400, { error: 'Unsupported Payment Format', message: 'Use a canonical x402 v2 PAYMENT-SIGNATURE header; legacy proof headers are not accepted.' });
+    }
+  } catch (error) {
+    return respond(400, { error: 'Bad Request', message: error instanceof SyntaxError ? 'Malformed JSON body.' : error instanceof Error ? error.message : 'Invalid request.' });
+  }
 
-      if (!parsedFromB64) {
-        // Raw hex signature or hash
-        proofObj = {
-          scheme: 'transferWithAuthorization',
-          clientSignature: rawStr,
-          payerAddress: payerStr || '0x0000000000000000000000000000000000000000',
-          timestamp: Date.now()
-        };
-      }
-    }
-    // Normalize RFC x402 v2 payload fields into internal proof object
-    if (!proofObj.payerAddress && (proofObj as any).payload?.from) {
-      proofObj.payerAddress = (proofObj as any).payload.from;
-    }
-    if (!proofObj.clientSignature && (proofObj as any).signature) {
-      proofObj.clientSignature = (proofObj as any).signature;
-    }
-    if (!proofObj.authorization && (proofObj as any).payload) {
-      proofObj.authorization = (proofObj as any).payload;
-    }
+  const challenge = generate402Challenge(resource, resource.network, origin);
+  const challengeHeader = { 'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(challenge)).toString('base64') };
+  if (!encodedProof) return respond(402, challenge, challengeHeader);
+
+  let proof: unknown;
+  try {
+    if (encodedProof.length > 8192 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encodedProof)) throw new Error('Invalid payment header.');
+    const decoded = Buffer.from(encodedProof, 'base64');
+    if (decoded.toString('base64') !== encodedProof) throw new Error('Invalid base64 payment header.');
+    proof = JSON.parse(decoded.toString('utf8'));
   } catch {
-    return {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: { error: 'Bad Request', message: 'Malformed X-Payment-Proof header' }
-    };
+    return respond(400, { error: 'Bad Request', message: 'PAYMENT-SIGNATURE must be base64-encoded x402 v2 JSON.' });
   }
 
-  // 4. Verify payment proof cryptographically
-  const verification = await verifyPaymentProof(proofObj, resource);
-
-  if (!verification.valid) {
-    return {
-      status: 402,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: {
-        error: 'Payment Verification Failed',
-        message: verification.error || 'Cryptographic EIP-712 payment authorization was invalid or rejected.',
-        challenge: generate402Challenge(resource, 'base')
-      }
-    };
-  }
-
-  // 5. Execute and dispatch real upstream provider
+  let verification;
   try {
-    const data = await dispatchResourceRequest(resource.id, parsedParams);
-
-    return {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'X-402-Settlement-Tx': verification.txHash || 'settled',
-        'X-402-Settlement-Payer': verification.payer
-      },
-      body: {
-        _settlement: {
-          protocol: 'RFC x402 v2',
-          network: 'Base (Chain ID 8453)',
-          asset: 'USDC',
-          cost_usdc: `$${resource.priceUsdc.toFixed(2)}`,
-          payer: verification.payer,
-          tx_hash: verification.txHash,
-          settled_at: verification.settledAt
-        },
-        data
-      }
-    };
-  } catch (err: any) {
-    return {
-      status: 502,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: {
-        error: 'Upstream Provider Error',
-        message: err.message || 'Error communicating with external live provider.'
-      }
-    };
+    verification = await dependencies.verify(proof, resource);
+  } catch {
+    return respond(503, { error: 'Payment Verification Unavailable', message: 'Payment verification could not complete. No payment was submitted.' });
   }
+  if (!verification.valid) {
+    const code = verification.errorCode || 'invalid_payment';
+    if (code === 'settlement_pending' || code === 'settlement_in_progress') {
+      const transaction = verification.txHash && /^0x[0-9a-fA-F]{64}$/.test(verification.txHash) ? verification.txHash : '';
+      const network = `eip155:${resource.chainId}`;
+      const paymentResponse = { success: false, errorReason: code, transaction, network, payer: verification.payer, amount: verification.amount };
+      return respond(503, {
+        error: 'Payment Settlement Failed', code, transaction, network,
+        message: 'Settlement is not confirmed. Reconcile this authorization on-chain before retrying; do not submit a new payment.'
+      }, { 'PAYMENT-RESPONSE': Buffer.from(JSON.stringify(paymentResponse)).toString('base64') });
+    }
+    return respond(unavailableCodes.has(code) ? 503 : 402, { error: 'Payment Verification Failed', code, message: verification.error || 'Payment authorization rejected.' }, challengeHeader);
+  }
+
+  let data;
+  try {
+    data = await dependencies.dispatch(resource.id, params);
+    const serialized = JSON.stringify(data);
+    if (serialized === undefined || Buffer.byteLength(serialized, 'utf8') > 1_000_000) throw new Error('Invalid provider response size.');
+    data = JSON.parse(serialized);
+  } catch {
+    return respond(502, { error: 'Upstream Provider Error', message: 'The provider could not fulfill the request. No payment was submitted.' });
+  }
+
+  let settlement;
+  try {
+    settlement = await dependencies.settle(proof, resource);
+  } catch {
+    return respond(503, { error: 'Payment Settlement Failed', code: 'settlement_pending', message: 'Settlement status is uncertain. Reconcile this authorization on-chain before retrying; do not submit a new payment.' });
+  }
+  const transaction = settlement.txHash && /^0x[0-9a-fA-F]{64}$/.test(settlement.txHash) ? settlement.txHash : '';
+  const network = `eip155:${resource.chainId}`;
+  const confirmed = settlement.valid && Boolean(transaction) && Boolean(settlement.settledAt) &&
+    settlement.amount === resource.amount && settlement.payer.toLowerCase() === verification.payer.toLowerCase() &&
+    (!settlement.network || settlement.network === network);
+  const paymentResponse = {
+    success: confirmed,
+    transaction,
+    network,
+    payer: settlement.payer,
+    amount: settlement.amount,
+    ...(!confirmed ? { errorReason: settlement.errorCode || 'settlement_failed' } : {})
+  };
+  const responseHeader = { 'PAYMENT-RESPONSE': Buffer.from(JSON.stringify(paymentResponse)).toString('base64') };
+  if (!confirmed) {
+    const code = settlement.errorCode || 'settlement_failed';
+    return respond(unavailableCodes.has(code) || transaction ? 503 : 402, {
+      error: 'Payment Settlement Failed', code, transaction, network,
+      message: transaction || unavailableCodes.has(code)
+        ? 'Settlement is not confirmed. Reconcile this authorization on-chain before retrying; do not submit a new payment.'
+        : settlement.error || 'Payment settlement was rejected. No paid data was released.'
+    }, responseHeader);
+  }
+
+  return respond(200, {
+    _settlement: {
+      protocol: 'x402 v2', network, asset: 'USDC', cost_usdc: `$${resource.priceUsdc.toFixed(2)}`,
+      payer: settlement.payer, tx_hash: transaction, settled_at: settlement.settledAt
+    },
+    data
+  }, responseHeader);
 }

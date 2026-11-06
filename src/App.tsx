@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HomePage } from './pages/HomePage';
 import { CapabilitiesPage } from './pages/CapabilitiesPage';
-import { PlaygroundPage } from './pages/PlaygroundPage';
+import { PlaygroundPage, type DashboardSettlementItem } from './pages/PlaygroundPage';
 import { ProtocolPage } from './pages/ProtocolPage';
 import { DocsPage } from './pages/DocsPage';
 import { McpIntegrationModal } from './components/McpIntegrationModal';
@@ -15,6 +15,7 @@ export const App: React.FC = () => {
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState<boolean>(false);
   const [selectedResourceId, setSelectedResourceId] = useState<string>('crypto_price');
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
+  const [settlementLedger, setSettlementLedger] = useState<DashboardSettlementItem[]>([]);
 
   // Scroll to top when page changes
   useEffect(() => {
@@ -28,7 +29,7 @@ export const App: React.FC = () => {
   };
 
   const handleSelectQueryForPlayground = (query: string) => {
-    setSelectedResourceId('academic_works');
+    setSelectedResourceId('academic_search');
     setInitialQuery(query);
     setCurrentPage('playground');
   };
@@ -60,6 +61,8 @@ export const App: React.FC = () => {
           onOpenDiscovery={() => setIsDiscoveryOpen(true)}
           initialResourceId={selectedResourceId}
           initialQuery={initialQuery}
+          settlementLedger={settlementLedger}
+          onRecordSettlement={(item) => setSettlementLedger(previous => [item, ...previous.filter(entry => entry.id !== item.id)])}
         />
       )}
 

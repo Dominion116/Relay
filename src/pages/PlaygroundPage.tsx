@@ -1,16 +1,32 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
-import { RELAY_RESOURCES, BASE_USDC_MAINNET, generate402Challenge, verifyPaymentProof, dispatchResourceRequest } from '../server/x402Engine';
-import { X402Challenge, X402VerificationResult, X402PaymentProof } from '../types/x402';
-import { EIP712_TRANSFER_TYPES } from '../server/agentWallet';
+import { RELAY_RESOURCES } from '../shared/resources';
+import { MAX_REQUEST_BYTES, validateResourceParams } from '../shared/validation';
+import {
+  createPaymentAuthorization, createPaymentPayload, decodePaymentHeader, encodePaymentHeader,
+  isTransactionHash, validatePaymentChallenge, validateSettlementResponse,
+  type PaymentPolicy, type SettlementReceipt,
+} from '../shared/paymentClient';
+import type { X402Challenge, X402PaymentProof, X402Resource } from '../types/x402';
+import { getGatewayUrl, relayChain, relayNetwork, relayNetworkLabel, relayTokenAddress, relayTreasuryAddress } from '../config/wagmi';
 import { FaPlay, FaCopy, FaCheck } from 'react-icons/fa6';
-import { AlertCircle, ShieldCheck, Wallet, ArrowRight, ExternalLink, Receipt } from 'lucide-react';
-import { motion } from 'motion/react';
+import { AlertCircle, Wallet, ExternalLink, Receipt } from 'lucide-react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useReadContract, useSignTypedData, useSwitchChain } from 'wagmi';
-import { base } from 'wagmi/chains';
-import { parseSignature, getAddress } from 'viem';
+
+export interface DashboardSettlementItem {
+  id: string;
+  resourceName: string;
+  path: string;
+  costUsdc: number;
+  payer: string;
+  payTo: string;
+  chainId: number;
+  txHash?: string;
+  timestamp: string;
+  status: 'SETTLED' | 'PENDING';
+}
 
 interface PlaygroundPageProps {
   onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
@@ -18,837 +34,318 @@ interface PlaygroundPageProps {
   onOpenDiscovery: () => void;
   initialResourceId?: string;
   initialQuery?: string;
+  settlementLedger: DashboardSettlementItem[];
+  onRecordSettlement: (item: DashboardSettlementItem) => void;
 }
 
-const ERC20_BALANCE_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }]
+export class PlaygroundPaymentError extends Error {
+  constructor(message: string, public readonly transactionHash?: string) {
+    super(message);
+    this.name = 'PlaygroundPaymentError';
   }
-] as const;
-
-
-export interface DashboardSettlementItem {
-  id: string;
-  resourceId: string;
-  resourceName: string;
-  path: string;
-  costUsdc: number;
-  payer: string;
-  payTo: string;
-  txHash: string;
-  signature: string;
-  timestamp: string;
-  latencyMs: number;
-  status: 'SETTLED' | 'PENDING';
 }
+
+interface GatewayExecution {
+  resource: X402Resource;
+  params: unknown;
+  policy: PaymentPolicy;
+  payer: string;
+  signal: AbortSignal;
+  sign: (typedData: ReturnType<typeof createPaymentAuthorization>['typedData']) => Promise<`0x${string}`>;
+  onChallenge: (challenge: X402Challenge) => void;
+  onProof: (proof: X402PaymentProof) => void;
+  onSubmitted: (nonce: string) => void;
+}
+
+// One unsigned request and at most one signed submission. An uncertain submission is never repaid here.
+export async function executePlaygroundRequest(options: GatewayExecution) {
+  const params = validateResourceParams(options.resource, options.params);
+  const body = JSON.stringify(params);
+  if (new TextEncoder().encode(body).length > MAX_REQUEST_BYTES) throw new Error('Request body is too large.');
+  const target = `${options.policy.gatewayUrl}${options.resource.path}`;
+  const post = async (payment?: string, onResponse?: (response: Response) => void) => {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    options.signal.addEventListener('abort', abort, { once: true });
+    if (options.signal.aborted) abort();
+    const timeout = setTimeout(abort, 30_000);
+    try {
+      const response = await fetch(target, {
+        method: 'POST', redirect: 'error', credentials: 'omit', cache: 'no-store', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', ...(payment ? { 'PAYMENT-SIGNATURE': payment } : {}) }, body,
+      });
+      onResponse?.(response);
+      return { response, body: await response.json() as Record<string, unknown> };
+    } finally {
+      clearTimeout(timeout);
+      options.signal.removeEventListener('abort', abort);
+    }
+  };
+
+  const initial = await post();
+  if (initial.response.status !== 402) {
+    throw new Error(`Expected an x402 challenge, received HTTP ${initial.response.status}. No payment was signed.`);
+  }
+  const validated = validatePaymentChallenge(decodePaymentHeader(initial.response.headers.get('PAYMENT-REQUIRED')), options.policy);
+  const bodyChallenge = validatePaymentChallenge(initial.body, options.policy);
+  if (JSON.stringify(validated.challenge) !== JSON.stringify(bodyChallenge.challenge)) throw new Error('Payment header and body disagree. No payment was signed.');
+  options.onChallenge(validated.challenge);
+  if (options.signal.aborted) throw new Error('Request cancelled before signing.');
+  const { authorization, typedData } = createPaymentAuthorization(validated, options.payer);
+  const signature = await options.sign(typedData);
+  if (options.signal.aborted) throw new Error('Request cancelled before submission.');
+  const proof = createPaymentPayload(validated, authorization, signature);
+  options.onProof(proof);
+  const payment = encodePaymentHeader(proof);
+  options.onSubmitted(authorization.nonce);
+
+  let transactionHash: string | undefined;
+  try {
+    // Capture a reported hash before reading the body, without inferring confirmation from it.
+    const paid = await post(payment, response => {
+      try {
+        const result = decodePaymentHeader(response.headers.get('PAYMENT-RESPONSE')) as Record<string, unknown>;
+        if (result?.network === validated.accepted.network && typeof result.payer === 'string' &&
+            result.payer.toLowerCase() === options.payer.toLowerCase() && isTransactionHash(result.transaction) &&
+            (result.amount === undefined || result.amount === validated.accepted.amount)) {
+          transactionHash = result.transaction;
+        }
+      } catch {
+        // Invalid metadata leaves the submitted authorization unresolved.
+      }
+    });
+    const header = paid.response.headers.get('PAYMENT-RESPONSE');
+    if (paid.response.status !== 200) {
+      throw new Error(typeof paid.body?.message === 'string' ? paid.body.message : `Gateway returned HTTP ${paid.response.status}.`);
+    }
+    const receipt = validateSettlementResponse(paid.body, header, {
+      network: validated.accepted.network, payer: options.payer, asset: validated.accepted.asset, amount: validated.accepted.amount,
+    });
+    return { receipt, data: paid.body.data };
+  } catch (cause) {
+    throw new PlaygroundPaymentError(
+      `${cause instanceof Error ? cause.message : 'Gateway request failed.'} Payment was not confirmed. Reconcile the submitted authorization before paying again.`,
+      transactionHash,
+    );
+  }
+}
+
+const balanceAbi = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: 'balance', type: 'uint256' }] }] as const;
+const outputTabs = [ ['console', 'Wire Console'], ['ledger', 'Settlement Ledger'], ['curl', 'cURL'], ['ts', 'TypeScript SDK'], ['python', 'Python Discovery'] ] as const;
+type OutputTab = typeof outputTabs[number][0];
 
 export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
-  onNavigate,
-  onOpenMcp,
-  onOpenDiscovery,
-  initialResourceId = 'crypto_price',
-  initialQuery
+  onNavigate, onOpenMcp, onOpenDiscovery, initialResourceId = 'crypto_price', initialQuery,
+  settlementLedger, onRecordSettlement,
 }) => {
-  const [selectedResourceId, setSelectedResourceId] = useState<string>(initialResourceId);
-
-  const initialResource = RELAY_RESOURCES.find(r => r.id === initialResourceId) || RELAY_RESOURCES[0];
-  const initialParams = initialQuery && initialResource.defaultParams.query !== undefined
-    ? { ...initialResource.defaultParams, query: initialQuery }
-    : initialResource.defaultParams;
-
-  const [requestBodyText, setRequestBodyText] = useState<string>(
-    JSON.stringify(initialParams, null, 2)
-  );
-  const [activeTab, setActiveTab] = useState<'console' | 'ledger' | 'curl' | 'python' | 'ts'>('console');
-  const [settlementLedger, setSettlementLedger] = useState<DashboardSettlementItem[]>([]);
-  const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState<boolean>(false);
-
-  // Wagmi & RainbowKit Web3 State
-  const { address, isConnected, chain } = useAccount();
-  const { switchChain } = useSwitchChain();
-  const { signTypedDataAsync } = useSignTypedData();
-
-  // Real on-chain Base USDC balance
-  const { data: rawUsdcBalance, isLoading: isBalanceLoading, refetch: refetchUsdc } = useReadContract({
-    address: BASE_USDC_MAINNET,
-    abi: ERC20_BALANCE_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(address && isConnected)
-    }
-  });
-
-  const realUsdcBalance = rawUsdcBalance !== undefined
-    ? Number(rawUsdcBalance) / 1_000_000
-    : null;
-
-  const isBaseMainnet = chain?.id === base.id;
-
-  // Execution state
-  const [executing, setExecuting] = useState<boolean>(false);
+  const initialResource = RELAY_RESOURCES.find(resource => resource.id === initialResourceId) || RELAY_RESOURCES[0];
+  const [selectedResourceId, setSelectedResourceId] = useState(initialResource.id);
+  const [requestBodyText, setRequestBodyText] = useState(JSON.stringify(
+    initialQuery && 'query' in initialResource.defaultParams ? { ...initialResource.defaultParams, query: initialQuery } : initialResource.defaultParams, null, 2,
+  ));
+  const [activeTab, setActiveTab] = useState<OutputTab>('console');
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [executing, setExecuting] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [challenge402, setChallenge402] = useState<X402Challenge | null>(null);
   const [activeProof, setActiveProof] = useState<X402PaymentProof | null>(null);
-  const [verificationResult, setVerificationResult] = useState<X402VerificationResult | null>(null);
-  const [responseData, setResponseData] = useState<any>(null);
-  const [executionTimeMs, setExecutionTimeMs] = useState<number>(0);
+  const [verificationResult, setVerificationResult] = useState<{ valid: true; receipt: SettlementReceipt } | null>(null);
+  const [responseData, setResponseData] = useState<unknown>(null);
+  const [executionTimeMs, setExecutionTimeMs] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const executionRef = useRef<AbortController | null>(null);
+  const { address, isConnected, chain, connector } = useAccount();
+  const currentWallet = useRef({ address, isConnected });
+  currentWallet.current = { address, isConnected };
+  const { switchChainAsync } = useSwitchChain();
+  const { signTypedDataAsync } = useSignTypedData();
+  const { data: rawUsdcBalance, isLoading: isBalanceLoading, refetch: refetchUsdc } = useReadContract({
+    address: relayTokenAddress, chainId: relayChain.id, abi: balanceAbi, functionName: 'balanceOf',
+    args: address ? [address] : undefined, query: { enabled: Boolean(address && isConnected) },
+  });
+  const selectedResource = RELAY_RESOURCES.find(resource => resource.id === selectedResourceId)!;
+  const gatewayUrl = getGatewayUrl();
+  const pendingPayment = settlementLedger.find(item => item.status === 'PENDING' && item.payer.toLowerCase() === address?.toLowerCase() && item.chainId === relayChain.id);
 
-  const selectedResource = RELAY_RESOURCES.find(r => r.id === selectedResourceId) || RELAY_RESOURCES[0];
+  useEffect(() => () => executionRef.current?.abort(), []);
 
-  const handleSelectResource = (id: string) => {
-    setSelectedResourceId(id);
-    const res = RELAY_RESOURCES.find(r => r.id === id);
-    if (res) {
-      setRequestBodyText(JSON.stringify(res.defaultParams, null, 2));
-    }
-    setStep(1);
+  const clearExecution = () => {
     setChallenge402(null);
     setActiveProof(null);
     setVerificationResult(null);
     setResponseData(null);
     setErrorMsg(null);
+    setExecutionTimeMs(0);
+    setCopiedCode(false);
+    setStep(1);
   };
 
   const handleExecute = async () => {
-    if (!isConnected || !address) {
-      setErrorMsg('Wallet connection required. Please connect your Base wallet to execute this request.');
-      return;
-    }
-
-    if (!isBaseMainnet) {
-      setErrorMsg('Wrong network. Please switch to Base Mainnet (Chain ID 8453).');
-      return;
-    }
-
-    let parsedParams: any = {};
-    try {
-      parsedParams = JSON.parse(requestBodyText);
-    } catch (e: any) {
-      setErrorMsg(`Invalid JSON input: ${e.message}`);
-      return;
-    }
-
-    const cost = selectedResource.priceUsdc;
-    if (realUsdcBalance !== null && realUsdcBalance < cost) {
-      setErrorMsg(`Insufficient Base USDC balance ($${realUsdcBalance.toFixed(2)} USDC). Requires $${cost.toFixed(2)} USDC.`);
-      return;
-    }
-
+    if (executionRef.current) return;
+    clearExecution();
+    const start = performance.now();
+    const controller = new AbortController();
+    executionRef.current = controller;
     setExecuting(true);
-    setErrorMsg(null);
-    setStep(1);
-    const startTime = performance.now();
-
+    let pendingRecord: DashboardSettlementItem | undefined;
     try {
-      // Step 1: Gateway request -> Step 2: HTTP 402 Challenge on Base Mainnet
-      await new Promise(r => setTimeout(r, 300));
-      const challenge = generate402Challenge(selectedResource, 'base');
-      setChallenge402(challenge);
-      setStep(2);
-
-      // Step 2 -> Step 3: Real EIP-712 ERC-3009 TransferWithAuthorization Signature
-      await new Promise(r => setTimeout(r, 350));
-      setStep(3);
-
-      const domain = {
-        name: 'USD Coin',
-        version: '2',
-        chainId: 8453,
-        verifyingContract: getAddress(challenge.paymentRequirements.tokenAddress)
-      } as const;
-
-      const rawNonce = challenge.paymentRequirements.nonce;
-      const formattedNonce = rawNonce.startsWith('0x') && rawNonce.length === 66
-        ? (rawNonce as `0x${string}`)
-        : (`0x${rawNonce.replace(/^0x/, '').padStart(64, '0')}` as `0x${string}`);
-
-      const signature = await signTypedDataAsync({
-        domain,
-        types: EIP712_TRANSFER_TYPES,
-        primaryType: 'TransferWithAuthorization',
-        message: {
-          from: getAddress(address),
-          to: getAddress(challenge.paymentRequirements.payTo),
-          value: BigInt(challenge.paymentRequirements.amount),
-          validAfter: 0n,
-          validBefore: BigInt(challenge.paymentRequirements.validBefore),
-          nonce: formattedNonce
-        }
+      if (!isConnected || !address) throw new Error('Connect a wallet before executing a paid request.');
+      if (pendingPayment) throw new Error('A previous payment is still unresolved. Reconcile it before signing another payment.');
+      const params = validateResourceParams(selectedResource, JSON.parse(requestBodyText));
+      const { receipt, data } = await executePlaygroundRequest({
+        resource: selectedResource, params, payer: address, signal: controller.signal,
+        policy: { gatewayUrl, endpoint: selectedResource.path, network: relayNetwork, treasuryAddress: relayTreasuryAddress, expectedAmount: selectedResource.amount },
+        onChallenge: challenge => { setChallenge402(challenge); setStep(2); },
+        sign: async typedData => {
+          if (chain?.id !== relayChain.id) {
+            const switched = await switchChainAsync({ chainId: relayChain.id });
+            if (switched.id !== relayChain.id) throw new Error(`Switch to ${relayNetworkLabel} before signing.`);
+          }
+          if (!currentWallet.current.isConnected || currentWallet.current.address !== address || controller.signal.aborted) throw new Error('Wallet changed or request cancelled before signing.');
+          const balance = await refetchUsdc();
+          if (balance.error || typeof balance.data !== 'bigint') throw new Error(`Unable to verify the ${relayNetworkLabel} USDC balance. No payment was signed.`);
+          if (balance.data < BigInt(selectedResource.amount)) throw new Error('Insufficient USDC for the selected endpoint.');
+          if (controller.signal.aborted) throw new Error('Request cancelled before signing.');
+          if (await connector?.getChainId() !== relayChain.id) throw new Error(`Wallet is not on ${relayNetworkLabel}. No payment was signed.`);
+          setStep(3);
+          const signature = await signTypedDataAsync({ ...typedData, account: address });
+          if (!currentWallet.current.isConnected || currentWallet.current.address !== address) throw new Error('Wallet changed before submission.');
+          return signature;
+        },
+        onProof: setActiveProof,
+        onSubmitted: nonce => {
+          pendingRecord = { id: nonce, resourceName: selectedResource.name, path: selectedResource.path, costUsdc: selectedResource.priceUsdc,
+            payer: address, payTo: relayTreasuryAddress, chainId: relayChain.id, timestamp: new Date().toISOString(), status: 'PENDING' };
+          onRecordSettlement(pendingRecord);
+        },
       });
-
-      const parsedSig = parseSignature(signature);
-
-      const proofObj: X402PaymentProof = {
-        scheme: 'transferWithAuthorization',
-        clientSignature: signature,
-        payerAddress: address,
-        timestamp: Date.now(),
-        authorization: {
-          from: address,
-          to: challenge.paymentRequirements.payTo,
-          value: challenge.paymentRequirements.amount,
-          validAfter: 0,
-          validBefore: challenge.paymentRequirements.validBefore,
-          nonce: challenge.paymentRequirements.nonce,
-          v: parsedSig.v ? Number(parsedSig.v) : undefined,
-          r: parsedSig.r,
-          s: parsedSig.s
-        }
-      };
-
-      setActiveProof(proofObj);
-
-      // Step 3 -> Step 4: Cryptographic Verification and Live Data Dispatch
-      await new Promise(r => setTimeout(r, 300));
-      const verification = await verifyPaymentProof(proofObj, selectedResource, challenge);
-      setVerificationResult(verification);
-
-      if (!verification.valid) {
-        throw new Error(verification.error || 'Cryptographic EIP-712 signature verification failed.');
-      }
-
-      // Fetch live data directly from provider
-      const data = await dispatchResourceRequest(selectedResource.id, parsedParams);
+      onRecordSettlement({ ...pendingRecord!, status: 'SETTLED', txHash: receipt.tx_hash, timestamp: receipt.settled_at });
+      setVerificationResult({ valid: true, receipt });
       setResponseData(data);
       setStep(4);
-
-      // Record in Session Settlement Ledger
-      const newReceipt: DashboardSettlementItem = {
-        id: `rcpt_${Date.now()}`,
-        resourceId: selectedResource.id,
-        resourceName: selectedResource.name,
-        path: selectedResource.path,
-        costUsdc: cost,
-        payer: address,
-        payTo: challenge.paymentRequirements.payTo,
-        txHash: verification.txHash || `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-        signature,
-        timestamp: new Date().toLocaleTimeString(),
-        latencyMs: Math.round(performance.now() - startTime),
-        status: 'SETTLED'
-      };
-      setSettlementLedger(prev => [newReceipt, ...prev]);
-
-      // Refetch onchain balance
-      refetchUsdc?.();
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Error executing request.');
+      void refetchUsdc();
+    } catch (cause) {
+      if (cause instanceof PlaygroundPaymentError && pendingRecord) onRecordSettlement({ ...pendingRecord, txHash: cause.transactionHash });
+      setErrorMsg(cause instanceof Error ? cause.message : 'Request failed.');
     } finally {
-      const endTime = performance.now();
-      setExecutionTimeMs(Math.round(endTime - startTime));
+      executionRef.current = null;
       setExecuting(false);
+      setExecutionTimeMs(Math.round(performance.now() - start));
     }
   };
 
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
+  const snippets = {
+    curl: `# POSIX shell: inspect the canonical challenge without signing\ncurl -i -X POST '${gatewayUrl}${selectedResource.path}' \\\n  -H 'Content-Type: application/json' \\\n  -d '${requestBodyText.replace(/'/g, "'\\''")}'\n\n# A paid retry requires PAYMENT-SIGNATURE: <base64 canonical proof>.\n# Use the bounded local SDK; never retry an uncertain payment automatically.`,
+    python: `import base64, json, requests\n\npayload = json.loads(${JSON.stringify(requestBodyText)})\nres = requests.post(${JSON.stringify(`${gatewayUrl}${selectedResource.path}`)}, json=payload, timeout=30, allow_redirects=False)\nif res.status_code == 402:\n    challenge = json.loads(base64.b64decode(res.headers["PAYMENT-REQUIRED"]))\n    print(json.dumps(challenge, indent=2))\n# Discovery only: this example does not sign or submit a payment.`,
+    ts: `// Run from this checkout with Node --import tsx. See Docs for the launcher.\nimport { RelayClient } from './src/sdk/index.ts';\n\nconst relay = new RelayClient({\n  privateKey: process.env.AGENT_PRIVATE_KEY || '',\n  gatewayUrl: ${JSON.stringify(gatewayUrl)},\n  network: '${relayNetwork}',\n  treasuryAddress: '${relayTreasuryAddress}',\n  maxPaymentUsdc: '${selectedResource.priceUsdc.toFixed(2)}',\n  maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0'\n});\n\n// Zero or omitted daily budget disables payments.\nconst result = await relay.call('${selectedResource.path}', JSON.parse(${JSON.stringify(requestBodyText)}));\nconsole.log(result);`,
   };
-
-  const getCurlSnippet = () => {
-    return `# Step 1: Request endpoint (receives HTTP 402 Challenge on Base)
-curl -X POST https://relayx402.vercel.app${selectedResource.path} \\
-  -H "Content-Type: application/json" \\
-  -d '${requestBodyText.replace(/\n/g, ' ')}'
-
-# Step 2: Sign Base EIP-712 transfer authorization & resubmit
-curl -X POST https://relayx402.vercel.app${selectedResource.path} \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer <signed_eip712_json_or_b64>" \\
-  -d '${requestBodyText.replace(/\n/g, ' ')}'`;
-  };
-
-  const getPythonSnippet = () => {
-    return `import requests, json
-
-url = "https://relayx402.vercel.app${selectedResource.path}"
-payload = ${requestBodyText}
-
-# Request endpoint without payment
-res = requests.post(url, json=payload)
-
-if res.status_code == 402:
-    challenge = res.json()["paymentRequirements"]
-    print(f"Payment Required: {challenge['amountFormatted']} on Base (Chain {challenge['chainId']})")
-    print(f"Payee Address: {challenge['payTo']}")
-    print(f"USDC Contract: {challenge['tokenAddress']}")
-    # Sign EIP-712 TransferWithAuthorization using local agent key and attach in Authorization header`;
-  };
-
-  const getTsSnippet = () => {
-    return `import { createWalletClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { base } from 'viem/chains';
-
-const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY as \`0x\${string}\`);
-const client = createWalletClient({ account, chain: base, transport: http() });
-
-// Step 1: Initial call receives 402
-const res = await fetch('https://relayx402.vercel.app${selectedResource.path}', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(${requestBodyText.replace(/\n/g, ' ')})
-});
-
-if (res.status === 402) {
-  const challenge = await res.json();
-  // Sign EIP-712 TransferWithAuthorization on Base and re-send
-}`;
+  const copyCode = async (value: string) => {
+    try { await navigator.clipboard.writeText(value); setCopiedCode(true); }
+    catch { setErrorMsg('Clipboard access was denied.'); }
   };
 
   return (
     <div className="w-full bg-[#0a0a0a] text-neutral-400 font-sans antialiased min-h-screen flex flex-col justify-between">
-      {/* HeaderNav */}
-      <HeaderNav
-        currentPage="playground"
-        onNavigate={onNavigate}
-        onOpenMcp={onOpenMcp}
-        onOpenDiscovery={onOpenDiscovery}
-      />
-
+      <HeaderNav currentPage="playground" onNavigate={onNavigate} onOpenMcp={onOpenMcp} onOpenDiscovery={onOpenDiscovery} />
       <main className="flex-1 w-full">
         <div className="max-w-[1400px] w-full mx-auto px-6 md:px-12 lg:px-16 py-16 md:py-20">
-          
-          {/* Page Title & Dashboard Intro */}
           <div className="max-w-3xl mb-10">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
-              <span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
-              <span>Base Mainnet x402 Dashboard</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
-              Execute x402 payments on Base
-            </h1>
-            <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
-              Connect your Base wallet via RainbowKit to test real pay-per-request capabilities. Every call is paid in real Base USDC over the open x402 standard with cryptographic EIP-712 settlement.
-            </p>
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono mb-4"><span className="size-1.5 rounded-full bg-blue-500" /><span>{relayNetworkLabel} x402 Dashboard</span></div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-neutral-100 mb-4">Execute x402 payments on Base</h1>
+            <p className="text-[15px] leading-relaxed max-w-2xl">The gateway validates your request, returns a payment offer, and confirms settlement before releasing data. Review the exact USDC amount in your wallet. {relayNetwork === 'base-sepolia' ? 'This configuration uses Sepolia test tokens.' : 'This configuration authorizes real mainnet USDC.'}</p>
+            <p className="mt-3 text-xs font-mono text-neutral-500 break-all">Gateway: {gatewayUrl}</p>
           </div>
 
-          {/* 2-Column Playground Dashboard Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
-            
-            {/* Left Column: Wallet Connection & Request Form (5 cols) */}
-            <div className="lg:col-span-5 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-7 flex flex-col justify-between">
+            <div className="lg:col-span-5 min-w-0 rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-7 flex flex-col justify-between">
               <div>
-                
-                {/* RainbowKit Wallet Card (Exclusive to Dashboard) */}
                 <div className="rounded-xl bg-neutral-950/90 p-4 border border-neutral-800/90 mb-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 font-medium">
-                      <Wallet className="size-3.5 text-blue-400" />
-                      <span>Wallet & Settlement</span>
-                    </div>
-                    {isConnected && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                        Base Mainnet
-                      </span>
-                    )}
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3"><div className="flex items-center gap-2 text-xs font-mono text-neutral-300"><Wallet className="size-3.5 text-blue-400" /><span>Wallet & Settlement</span></div><span className="text-[10px] font-mono text-blue-400">{relayNetworkLabel}</span></div>
+                  <ConnectButton showBalance={false} chainStatus="icon" accountStatus="avatar" />
+                  <div className="mt-3 pt-2.5 border-t border-neutral-800/70 text-xs font-mono space-y-2">
+                    <div className="flex flex-wrap justify-between gap-2"><span>{relayNetworkLabel} USDC:</span><span className="text-neutral-200">{!isConnected ? 'Wallet not connected' : isBalanceLoading ? 'Fetching balance...' : rawUsdcBalance !== undefined ? `${(Number(rawUsdcBalance) / 1_000_000).toFixed(4)} USDC` : 'Balance unavailable'}</span></div>
+                    {isConnected && chain?.id !== relayChain.id && <p className="text-amber-300">Execution will request a switch to {relayNetworkLabel} before signing.</p>}
+                    <p className="text-[11px] text-neutral-500 font-sans">Gasless authorization does not itself prove settlement. Only a confirmed gateway receipt is marked settled.</p>
                   </div>
-
-                  {/* RainbowKit ConnectButton Component */}
-                  <div className="mb-3">
-                    <ConnectButton
-                      showBalance={false}
-                      chainStatus="icon"
-                      accountStatus="avatar"
-                    />
-                  </div>
-
-                  {/* Connected Wallet Onchain Stats */}
-                  {isConnected ? (
-                    <div className="pt-2.5 border-t border-neutral-800/70 space-y-2 text-xs font-mono">
-                      <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Base USDC Balance:</span>
-                        <span className="text-neutral-200 font-semibold">
-                          {isBalanceLoading ? (
-                            'Fetching balance...'
-                          ) : realUsdcBalance !== null ? (
-                            `${realUsdcBalance.toFixed(4)} USDC`
-                          ) : (
-                            '0.0000 USDC'
-                          )}
-                        </span>
-                      </div>
-                      
-                      {!isBaseMainnet && (
-                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] flex items-center justify-between">
-                          <span>Please switch to Base Mainnet</span>
-                          <button
-                            type="button"
-                            onClick={() => switchChain({ chainId: base.id })}
-                            className="px-2 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400 transition-colors"
-                          >
-                            Switch Chain
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="pt-2 border-t border-neutral-800/70">
-                      <p className="text-[11px] text-neutral-500 leading-relaxed font-sans">
-                        A connected Base wallet with USDC is required to test. Gasless EIP-712 authorizations sign directly in your wallet without native ETH gas.
-                      </p>
-                    </div>
-                  )}
                 </div>
-
-                {/* Endpoint Selector */}
                 <div className="mb-5">
-                  <label className="block text-xs font-mono font-medium text-neutral-400 uppercase tracking-wider mb-2">
-                    Select Endpoint
-                  </label>
-                  <select
-                    value={selectedResourceId}
-                    onChange={(e) => handleSelectResource(e.target.value)}
-                    className="w-full bg-neutral-900 text-neutral-200 border border-neutral-700/80 rounded-xl px-4 py-2.5 text-xs font-mono outline-none focus:border-neutral-500 focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    {RELAY_RESOURCES.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} : ${r.priceUsdc.toFixed(2)} USDC ({r.category})
-                      </option>
-                    ))}
+                  <label htmlFor="playground-endpoint" className="block text-xs font-mono uppercase tracking-wider mb-2">Select Endpoint</label>
+                  <select id="playground-endpoint" disabled={executing} value={selectedResourceId} onChange={event => {
+                    const resource = RELAY_RESOURCES.find(item => item.id === event.target.value);
+                    if (!resource) return;
+                    clearExecution(); setSelectedResourceId(resource.id); setRequestBodyText(JSON.stringify(resource.defaultParams, null, 2));
+                  }} className="w-full bg-neutral-900 text-neutral-200 border border-neutral-700/80 rounded-xl px-4 py-2.5 text-xs font-mono focus-visible:ring-2 focus-visible:ring-blue-500">
+                    {RELAY_RESOURCES.map(resource => <option key={resource.id} value={resource.id}>{resource.name} : ${resource.priceUsdc.toFixed(2)} USDC</option>)}
                   </select>
                 </div>
-
-                {/* Endpoint Telemetry */}
                 <div className="rounded-xl bg-neutral-950/60 p-4 border border-neutral-800/80 mb-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-medium text-neutral-400">Method & Route</span>
-                    <span className="text-xs font-mono font-medium text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                      ${selectedResource.priceUsdc.toFixed(2)} USDC
-                    </span>
-                  </div>
-                  <div className="font-mono text-xs text-neutral-200 font-semibold break-all">
-                    POST {selectedResource.path}
-                  </div>
-                  <p className="text-xs text-neutral-400 mt-2 leading-relaxed font-sans">
-                    {selectedResource.description}
-                  </p>
+                  <div className="flex flex-wrap justify-between gap-2 mb-2 text-xs font-mono"><span>Method & Route</span><span className="text-blue-400">${selectedResource.priceUsdc.toFixed(2)} USDC</span></div>
+                  <div className="font-mono text-xs text-neutral-200 break-all">POST {selectedResource.path}</div>
+                  <p className="text-xs mt-2 leading-relaxed">{selectedResource.description}</p>
                 </div>
-
-                {/* JSON Request Body Editor */}
                 <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-mono font-medium text-neutral-400 uppercase tracking-wider">
-                      Request Body (JSON)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setRequestBodyText(JSON.stringify(selectedResource.defaultParams, null, 2))}
-                      className="text-[11px] font-mono text-neutral-500 hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 rounded"
-                    >
-                      Reset Payload
-                    </button>
-                  </div>
-                  <textarea
-                    rows={6}
-                    value={requestBodyText}
-                    onChange={(e) => setRequestBodyText(e.target.value)}
-                    className="w-full bg-neutral-950 font-mono text-xs text-neutral-200 border border-neutral-800 rounded-xl p-3.5 outline-none focus:border-neutral-600 focus-visible:ring-2 focus-visible:ring-blue-500 resize-y"
-                    spellCheck={false}
-                  />
+                  <div className="flex flex-wrap justify-between gap-2 mb-2"><label htmlFor="playground-request-body" className="text-xs font-mono uppercase tracking-wider">Request Body (JSON)</label><button type="button" disabled={executing} onClick={() => { clearExecution(); setRequestBodyText(JSON.stringify(selectedResource.defaultParams, null, 2)); }} className="text-[11px] font-mono hover:text-neutral-200">Reset Payload</button></div>
+                  <textarea id="playground-request-body" rows={6} disabled={executing} value={requestBodyText} onChange={event => { clearExecution(); setRequestBodyText(event.target.value); }} spellCheck={false}
+                    className="w-full bg-neutral-950 font-mono text-xs text-neutral-200 border border-neutral-800 rounded-xl p-3.5 focus-visible:ring-2 focus-visible:ring-blue-500 resize-y" />
                 </div>
               </div>
-
-              {/* Action Button & Validation Alert */}
               <div>
-                {errorMsg && (
-                  <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 text-xs text-red-400 font-mono">
-                    <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                    <span>{errorMsg}</span>
-                  </div>
-                )}
-
-                {!isConnected ? (
-                  <div className="w-full p-4 rounded-xl bg-neutral-950 border border-neutral-800 flex flex-col items-center justify-center gap-2.5 text-center">
-                    <span className="text-xs text-neutral-300 font-medium">Connect wallet to unlock execution</span>
-                    <ConnectButton />
-                  </div>
-                ) : !isBaseMainnet ? (
-                  <button
-                    type="button"
-                    onClick={() => switchChain({ chainId: base.id })}
-                    className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium text-xs font-mono transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span>Switch to Base Mainnet</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={executing}
-                    onClick={handleExecute}
-                    className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-neutral-950 font-medium text-xs font-mono transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    {executing ? (
-                      <>
-                        <span className="size-3.5 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin" />
-                        <span>Signing & Settling on Base...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FaPlay className="size-3" />
-                        <span>Pay ${selectedResource.priceUsdc.toFixed(2)} USDC & Execute</span>
-                      </>
-                    )}
-                  </button>
-                )}
+                {errorMsg && <div role="alert" className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 text-xs text-red-400"><AlertCircle className="size-4 shrink-0" /><span>{errorMsg}</span></div>}
+                {pendingPayment && <div role="status" className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 space-y-2"><p>Pending payment: no confirmed settlement receipt. Further payments from this wallet are paused for this session; reconcile the authorization before retrying.</p>{pendingPayment.txHash ? <a className="underline break-all" href={`${relayChain.blockExplorers.default.url}/tx/${pendingPayment.txHash}`} target="_blank" rel="noreferrer">Check transaction {pendingPayment.txHash}</a> : <p>No transaction hash was returned. Do not assume that no payment occurred.</p>}</div>}
+                {!isConnected ? <div className="w-full p-4 rounded-xl bg-neutral-950 border border-neutral-800 text-center space-y-3"><p className="text-xs">Connect a wallet to authorize execution</p><ConnectButton /></div> :
+                  <button type="button" disabled={executing || Boolean(pendingPayment)} onClick={handleExecute} className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-500 text-neutral-950 font-medium text-xs font-mono flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500">
+                    <FaPlay className="size-3" /><span>{executing ? 'Waiting for wallet / gateway confirmation...' : `Pay $${selectedResource.priceUsdc.toFixed(2)} USDC & Execute`}</span>
+                  </button>}
               </div>
             </div>
 
-            {/* Right Column: Execution Inspector & Wire Console (7 cols) */}
-            <div className="lg:col-span-7 flex flex-col gap-6">
-              
-              {/* Stepper Handshake Card */}
+            <div className="lg:col-span-7 min-w-0 flex flex-col gap-6">
               <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6">
-                <div className="flex items-center justify-between mb-5">
-                  <span className="text-xs font-mono text-neutral-400 font-medium">x402 Protocol Settlement Flow</span>
-                  <span className="text-xs font-mono text-neutral-500">
-                    {step === 1 && '1. Unauthenticated Request'}
-                    {step === 2 && '2. HTTP 402 Challenge'}
-                    {step === 3 && '3. EIP-712 Wallet Signature'}
-                    {step === 4 && `4. Verified & Settled (${executionTimeMs}ms)`}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2">
-                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
-                    step >= 1 ? 'bg-neutral-900 border-neutral-700 text-neutral-200' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
-                  }`}>
-                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 1</span>
-                    <span className="font-semibold">POST /v1</span>
-                  </div>
-
-                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
-                    step >= 2 ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
-                  }`}>
-                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 2</span>
-                    <span className="font-semibold">HTTP 402</span>
-                  </div>
-
-                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
-                    step >= 3 ? 'bg-blue-500/10 border-blue-500/30 text-blue-300' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
-                  }`}>
-                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 3</span>
-                    <span className="font-semibold">EIP-712 Sign</span>
-                  </div>
-
-                  <div className={`p-2.5 rounded-lg border text-center text-xs font-mono transition-all ${
-                    step === 4 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-neutral-950/40 border-neutral-900 text-neutral-600'
-                  }`}>
-                    <span className="block text-[10px] text-neutral-500 mb-0.5">Step 4</span>
-                    <span className="font-semibold">HTTP 200 OK</span>
-                  </div>
+                <div className="flex flex-wrap justify-between gap-2 mb-5 text-xs font-mono"><span>x402 Protocol Settlement Flow</span><span role="status" aria-live="polite">{step === 4 ? `Confirmed (${executionTimeMs}ms)` : executing ? ['Requesting challenge', 'Validating offer / wallet', 'Awaiting settlement'][step - 1] : 'Ready'}</span></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {['POST /v1', 'HTTP 402', 'EIP-712 Sign', 'Confirmed'].map((label, index) => <div key={label} className={`p-2.5 rounded-lg border text-center text-xs font-mono ${step > index ? index === 3 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-neutral-900 border-neutral-700 text-neutral-200' : 'border-neutral-800 text-neutral-500'}`}><span className="block text-[10px] text-neutral-500 mb-0.5">Step {index + 1}</span>{label}</div>)}
                 </div>
               </div>
-
-              {/* Wire Inspector Console */}
-              <div className="rounded-2xl bg-neutral-950 border border-neutral-800/80 overflow-hidden flex flex-col flex-1">
-                {/* Tabs Header */}
-                <div className="flex items-center justify-between border-b border-neutral-800/80 px-4 py-2.5 bg-neutral-900/40">
-                  <div className="flex items-center gap-2" role="tablist" aria-label="Playground output format tabs">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === 'console'}
-                      onClick={() => setActiveTab('console')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
-                        activeTab === 'console'
-                          ? 'bg-neutral-800 text-white font-medium'
-                          : 'text-neutral-400 hover:text-neutral-200'
-                      }`}
-                    >
-                      Wire Console
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === 'ledger'}
-                      onClick={() => setActiveTab('ledger')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
-                        activeTab === 'ledger'
-                          ? 'bg-neutral-800 text-white font-medium'
-                          : 'text-neutral-400 hover:text-neutral-200'
-                      }`}
-                    >
-                      <Receipt className="size-3 text-emerald-400" />
-                      <span>Settlement Ledger</span>
-                      {settlementLedger.length > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-                          {settlementLedger.length}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === 'curl'}
-                      onClick={() => setActiveTab('curl')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
-                        activeTab === 'curl'
-                          ? 'bg-neutral-800 text-white font-medium'
-                          : 'text-neutral-400 hover:text-neutral-200'
-                      }`}
-                    >
-                      cURL
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === 'ts'}
-                      onClick={() => setActiveTab('ts')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
-                        activeTab === 'ts'
-                          ? 'bg-neutral-800 text-white font-medium'
-                          : 'text-neutral-400 hover:text-neutral-200'
-                      }`}
-                    >
-                      TypeScript (Viem)
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === 'python'}
-                      onClick={() => setActiveTab('python')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${
-                        activeTab === 'python'
-                          ? 'bg-neutral-800 text-white font-medium'
-                          : 'text-neutral-400 hover:text-neutral-200'
-                      }`}
-                    >
-                      Python
-                    </button>
+              <div className="rounded-2xl bg-neutral-950 border border-neutral-800/80 overflow-hidden flex flex-col flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2 border-b border-neutral-800/80 px-4 py-2.5 bg-neutral-900/40">
+                  <div className="flex flex-wrap gap-2 min-w-0" role="tablist" aria-label="Playground output" onKeyDown={event => {
+                    const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+                    if (!delta && event.key !== 'Home' && event.key !== 'End') return;
+                    event.preventDefault();
+                    const index = event.key === 'Home' ? 0 : event.key === 'End' ? outputTabs.length - 1 : (outputTabs.findIndex(([id]) => id === activeTab) + delta + outputTabs.length) % outputTabs.length;
+                    setActiveTab(outputTabs[index][0]);
+                    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
+                  }}>
+                    {outputTabs.map(([id, label]) => <button type="button" key={id} id={`output-tab-${id}`} role="tab" tabIndex={activeTab === id ? 0 : -1} aria-selected={activeTab === id} aria-controls="playground-output" onClick={() => { setActiveTab(id); setCopiedCode(false); }} className={`px-3 py-1 rounded-lg text-xs font-mono focus-visible:ring-1 focus-visible:ring-blue-500 ${activeTab === id ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-400 hover:text-neutral-200'}`}>{label}{id === 'ledger' && settlementLedger.length > 0 ? ` (${settlementLedger.length})` : ''}</button>)}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeTab === 'console') {
-                        copyCode(JSON.stringify(responseData || challenge402 || {}, null, 2));
-                      } else if (activeTab === 'ledger') {
-                        copyCode(JSON.stringify(settlementLedger, null, 2));
-                      } else if (activeTab === 'curl') {
-                        copyCode(getCurlSnippet());
-                      } else if (activeTab === 'ts') {
-                        copyCode(getTsSnippet());
-                      } else {
-                        copyCode(getPythonSnippet());
-                      }
-                    }}
-                    className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
-                    title="Copy to clipboard"
-                  >
-                    {copiedCode ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3" />}
-                  </button>
+                  <button type="button" aria-label="Copy current output" onClick={() => void copyCode(activeTab === 'console' ? JSON.stringify(responseData ?? challenge402 ?? {}, null, 2) : activeTab === 'ledger' ? JSON.stringify(settlementLedger, null, 2) : snippets[activeTab])} className="p-1.5 shrink-0 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white">{copiedCode ? <FaCheck className="size-3 text-emerald-400" /> : <FaCopy className="size-3" />}</button>
                 </div>
-
-                {/* Tab Content Display */}
-                <div className="p-4 sm:p-5 flex-1 font-mono text-xs overflow-auto max-h-[520px]">
-                  {activeTab === 'console' && (
-                    <div className="space-y-4">
-                      {/* Step 2 Challenge Output */}
-                      {challenge402 && (
-                        <div>
-                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
-                            <span>HTTP 402 PAYMENT REQUIRED (BASE MAINNET)</span>
-                            <span className="text-amber-400 font-semibold">Status 402</span>
-                          </div>
-                          <pre className="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">
-                            {JSON.stringify(challenge402, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-
-                      {/* Step 3 Active Proof Output */}
-                      {activeProof && (
-                        <div>
-                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
-                            <span>EIP-712 AUTHORIZATION PROOF (SIGNED BY CONNECTED WALLET)</span>
-                            <span className="text-blue-400 font-semibold">65-byte Secp256k1</span>
-                          </div>
-                          <pre className="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">
-                            {JSON.stringify(activeProof, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-
-                      {/* Step 4 Verification & Live Data */}
-                      {verificationResult && (
-                        <div>
-                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
-                            <span>CRYPTOGRAPHIC VERIFICATION</span>
-                            <span className="text-emerald-400 font-semibold">Signature Recovered</span>
-                          </div>
-                          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] space-y-1">
-                            <div>Payer Address: <code>{verificationResult.payer}</code></div>
-                            <div>Authorized Cost: <code>{verificationResult.amount} micro-USDC (${selectedResource.priceUsdc.toFixed(2)})</code></div>
-                            <div>Base Chain: <code>8453 (Base Mainnet)</code></div>
-                            <div>Settled Tx: <code>{verificationResult.txHash}</code></div>
-                          </div>
-                        </div>
-                      )}
-
-                      {responseData && (
-                        <div>
-                          <div className="flex items-center justify-between text-neutral-500 mb-1.5 text-[11px]">
-                            <span>LIVE ENDPOINT RESPONSE (HTTP 200 OK)</span>
-                            <span className="text-emerald-400 font-semibold">{executionTimeMs}ms</span>
-                          </div>
-                          <pre className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 text-neutral-200 overflow-x-auto text-[11px] leading-relaxed">
-                            {JSON.stringify(responseData, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-
-                      {!challenge402 && !executing && (
-                        <div className="py-16 text-center text-neutral-500 text-xs">
-                          {isConnected ? (
-                            <span>Connected: <code className="text-neutral-300">{address?.slice(0, 8)}...{address?.slice(-6)}</code>. Click "Pay & Execute" to sign and retrieve live data.</span>
-                          ) : (
-                            <span>Connect your Base wallet on the left to initiate the x402 payment cycle.</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                                    {activeTab === 'ledger' && (
-                    <div className="space-y-4">
-                      {/* Summary Banner */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800/80 text-xs font-mono">
-                        <div>
-                          <div className="text-neutral-500 text-[10px]">TOTAL SETTLED</div>
-                          <div className="text-emerald-400 font-semibold text-sm">
-                            ${settlementLedger.reduce((sum, item) => sum + item.costUsdc, 0).toFixed(4)} USDC
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-neutral-500 text-[10px]">TOTAL CALLS</div>
-                          <div className="text-neutral-200 font-semibold text-sm">{settlementLedger.length}</div>
-                        </div>
-                        <div>
-                          <div className="text-neutral-500 text-[10px]">SETTLEMENT ASSET</div>
-                          <div className="text-neutral-200 font-medium text-xs truncate">Base USDC</div>
-                        </div>
-                        <div>
-                          <div className="text-neutral-500 text-[10px]">TREASURY PAYEE</div>
-                          <a
-                            href="https://basescan.org/address/0x420f9F9deA7fA318eA8996C8aA00ad9738D98072"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 text-xs truncate"
-                          >
-                            <span>0x420f...8072</span>
-                            <ExternalLink className="size-2.5 shrink-0" />
-                          </a>
-                        </div>
-                      </div>
-
-                      {/* Ledger Item List */}
-                      {settlementLedger.length === 0 ? (
-                        <div className="py-16 text-center text-neutral-500 text-xs font-mono space-y-2">
-                          <Receipt className="size-6 text-neutral-600 mx-auto" />
-                          <div>No settlements recorded in this session yet.</div>
-                          <div className="text-neutral-600 text-[11px]">
-                            Connect your Base wallet and click "Pay & Execute" above to generate on-chain / EIP-712 settlement receipts.
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {settlementLedger.map((rcpt) => (
-                            <div
-                              key={rcpt.id}
-                              className="p-3.5 rounded-xl bg-neutral-900/40 border border-neutral-800/80 hover:border-neutral-700/80 transition-colors text-xs font-mono space-y-2"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20">
-                                    POST
-                                  </span>
-                                  <span className="text-neutral-200 font-medium">{rcpt.path}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-neutral-400 text-[11px]">{rcpt.timestamp}</span>
-                                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold text-[11px] border border-emerald-500/20">
-                                    +${rcpt.costUsdc.toFixed(2)} USDC
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-neutral-800/60 text-[11px] text-neutral-400">
-                                <div className="truncate">
-                                  <span className="text-neutral-500">Payer: </span>
-                                  <span className="text-neutral-300">{rcpt.payer}</span>
-                                </div>
-                                <div className="truncate flex items-center justify-between sm:justify-end gap-2">
-                                  <span className="text-neutral-500">Tx Hash: </span>
-                                  <a
-                                    href={`https://basescan.org/tx/${rcpt.txHash}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 font-mono"
-                                  >
-                                    <span>{rcpt.txHash.slice(0, 10)}...{rcpt.txHash.slice(-6)}</span>
-                                    <ExternalLink className="size-2.5" />
-                                  </a>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(JSON.stringify(rcpt, null, 2));
-                                      setCopiedReceiptId(rcpt.id);
-                                      setTimeout(() => setCopiedReceiptId(null), 2000);
-                                    }}
-                                    className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors ml-1"
-                                    title="Copy full receipt JSON"
-                                  >
-                                    {copiedReceiptId === rcpt.id ? (
-                                      <FaCheck className="size-3 text-emerald-400" />
-                                    ) : (
-                                      <FaCopy className="size-3" />
-                                    )}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {activeTab === 'curl' && (
-                    <pre className="text-neutral-300 leading-relaxed overflow-x-auto">
-                      {getCurlSnippet()}
-                    </pre>
-                  )}
-
-                  {activeTab === 'ts' && (
-                    <pre className="text-neutral-300 leading-relaxed overflow-x-auto">
-                      {getTsSnippet()}
-                    </pre>
-                  )}
-
-                  {activeTab === 'python' && (
-                    <pre className="text-neutral-300 leading-relaxed overflow-x-auto">
-                      {getPythonSnippet()}
-                    </pre>
-                  )}
+                <div id="playground-output" role="tabpanel" aria-labelledby={`output-tab-${activeTab}`} tabIndex={0} className="p-4 sm:p-5 flex-1 font-mono text-xs overflow-auto max-h-[580px] min-w-0">
+                  {activeTab === 'console' && <div className="space-y-4">
+                    {challenge402 && <div><div className="text-amber-300 mb-2">HTTP 402 / PAYMENT-REQUIRED</div><pre className="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">{JSON.stringify(challenge402, null, 2)}</pre></div>}
+                    {activeProof && <div><div className="text-blue-300 mb-2">PAYMENT-SIGNATURE authorization (signature redacted)</div><pre className="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-neutral-300 overflow-x-auto text-[11px] leading-relaxed">{JSON.stringify({ ...activeProof, payload: { ...activeProof.payload, signature: '[redacted]' } }, null, 2)}</pre></div>}
+                    {verificationResult?.valid && <div><div className="text-emerald-300 mb-2">GATEWAY-CONFIRMED SETTLEMENT</div><pre className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 overflow-x-auto text-[11px]">{JSON.stringify(verificationResult.receipt, null, 2)}</pre></div>}
+                    {verificationResult?.valid && responseData !== null && <div><div className="text-emerald-300 mb-2">GATEWAY RESPONSE (HTTP 200 OK)</div><pre className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 text-neutral-200 overflow-x-auto text-[11px] leading-relaxed">{JSON.stringify(responseData, null, 2)}</pre></div>}
+                    {!challenge402 && !executing && <p className="py-16 text-center text-neutral-500">Choose an endpoint and connect a wallet to inspect the gateway's x402 exchange.</p>}
+                  </div>}
+                  {activeTab === 'ledger' && <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800/80"><div><div className="text-neutral-500 text-[10px]">TOTAL CONFIRMED</div><div className="text-emerald-400 font-semibold">${settlementLedger.filter(item => item.status === 'SETTLED').reduce((sum, item) => sum + item.costUsdc, 0).toFixed(4)} USDC</div></div><div><div className="text-neutral-500 text-[10px]">PENDING AUTHORIZATIONS</div><div>{settlementLedger.filter(item => item.status === 'PENDING').length}</div></div></div>
+                    <p className="text-[11px] text-neutral-500">History stays in this browser tab while navigating. Export receipts before closing or reloading; pending entries are not proof of settlement.</p>
+                    {settlementLedger.length === 0 ? <div className="py-12 text-center text-neutral-500"><Receipt className="size-6 mx-auto mb-3" />No payments recorded in this session.</div> : settlementLedger.map(item => <div key={item.id} className="p-3.5 rounded-xl bg-neutral-900/40 border border-neutral-800/80 space-y-2">
+                      <div className="flex flex-wrap justify-between gap-2"><span className="text-neutral-200 break-all">POST {item.path}</span><span className={item.status === 'SETTLED' ? 'text-emerald-400' : 'text-amber-300'}>{item.status} / ${item.costUsdc.toFixed(2)} USDC</span></div>
+                      <div className="text-[11px] text-neutral-500">{new Date(item.timestamp).toLocaleString()} / Chain {item.chainId}</div>
+                      <div className="break-all text-[11px]">Payer: {item.payer}</div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">{item.txHash ? <a href={`${item.chainId === 84532 ? 'https://sepolia.basescan.org' : 'https://basescan.org'}/tx/${item.txHash}`} target="_blank" rel="noreferrer" className="text-blue-400 break-all inline-flex items-center gap-1">{item.txHash.slice(0, 12)}...{item.txHash.slice(-6)}<ExternalLink className="size-3" /></a> : <span className="text-amber-300">Transaction not confirmed; hash unavailable</span>}<button type="button" onClick={() => void copyCode(JSON.stringify(item, null, 2))} className="text-neutral-300 hover:text-white">Copy record</button></div>
+                    </div>)}
+                  </div>}
+                  {activeTab !== 'console' && activeTab !== 'ledger' && <pre className="text-neutral-300 leading-relaxed overflow-x-auto">{snippets[activeTab]}</pre>}
                 </div>
               </div>
-
             </div>
           </div>
-
         </div>
       </main>
-
-      <Footer />
+      <Footer onNavigate={onNavigate} onOpenMcp={onOpenMcp} onOpenDiscovery={onOpenDiscovery} />
     </div>
   );
 };

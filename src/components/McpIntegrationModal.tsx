@@ -1,40 +1,53 @@
 import React, { useState } from 'react';
 import { Copy, Check, Cpu } from 'lucide-react';
 import { FaXmark } from 'react-icons/fa6';
+import { Dialog } from './Dialog';
 
 interface McpModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }) => {
-  const [copied, setCopied] = useState<boolean>(false);
-
-  if (!isOpen) return null;
-
-  const claudeDesktopConfig = `{
+export const MCP_LOCAL_CONFIG = `{
   "mcpServers": {
     "relay": {
-      "command": "npx",
-      "args": ["-y", "@relay/mcp-server"],
+      "command": "node",
+      "args": [
+        "--import",
+        "file:///C:/path/to/Relay/node_modules/tsx/dist/loader.mjs",
+        "C:/path/to/Relay/src/mcp/server.ts"
+      ],
       "env": {
-        "BASE_NETWORK": "base",
-        "BASE_PRIVATE_KEY": "YOUR_AGENT_WALLET_KEY",
-        "MAX_DAILY_BUDGET_USDC": "5.00"
+        "AGENT_PRIVATE_KEY": "YOUR_LOCAL_WALLET_PRIVATE_KEY",
+        "BASE_NETWORK": "base-sepolia",
+        "GATEWAY_ORIGIN": "http://localhost:5173",
+        "RELAY_TREASURY_ADDRESS": "YOUR_CONFIGURED_TREASURY_ADDRESS",
+        "MAX_PAYMENT_USDC": "0",
+        "MAX_DAILY_BUDGET_USDC": "0"
       }
     }
   }
 }`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(claudeDesktopConfig);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }) => {
+  const [copied, setCopied] = useState<boolean>(false);
+  const [copyError, setCopyError] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(MCP_LOCAL_CONFIG);
+      setCopyError('');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopyError('Clipboard access was denied. The configuration remains available below.');
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-xl rounded-2xl bg-[#141414] border border-neutral-800 p-6 sm:p-7 shadow-2xl flex flex-col text-neutral-300 font-sans">
+    <Dialog titleId="mcp-dialog-title" onClose={onClose}>
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4">
@@ -43,12 +56,14 @@ export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }
               <Cpu className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-medium text-neutral-100 text-base">Model Context Protocol</h3>
+              <h2 id="mcp-dialog-title" className="font-medium text-neutral-100 text-base">Model Context Protocol</h2>
               <p className="text-xs text-neutral-500 font-mono">Connect Claude Desktop or Cursor to Relay</p>
             </div>
           </div>
 
           <button
+            type="button"
+            aria-label="Close MCP configuration"
             onClick={onClose}
             className="size-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
           >
@@ -59,7 +74,7 @@ export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }
         {/* Body */}
         <div className="py-4 space-y-4">
           <p className="text-[14px] text-neutral-400 leading-relaxed">
-            Expose Relay endpoints as native tools for Claude or Cursor. Tools execute with inline x402 payment in Base USDC.
+            Run the repository-local stdio server with Node after installing this checkout. Replace both absolute paths below. No public Relay npm package is required.
           </p>
 
           <div className="relative">
@@ -74,15 +89,20 @@ export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }
               </button>
             </div>
             <pre className="p-4 bg-black/80 text-neutral-300 rounded-b-xl font-mono text-xs overflow-x-auto leading-relaxed border border-neutral-800">
-              <code>{claudeDesktopConfig}</code>
+              <code>{MCP_LOCAL_CONFIG}</code>
             </pre>
           </div>
 
           <div className="rounded-xl bg-neutral-900/60 border border-neutral-800 p-4 text-xs font-mono text-neutral-300 space-y-1.5">
             <div className="font-semibold text-neutral-200 uppercase tracking-wide text-[11px]">Environment requirements</div>
-            <div>• <code className="text-white">BASE_NETWORK</code>: "base" (Base Mainnet)</div>
-            <div>• <code className="text-white">BASE_PRIVATE_KEY</code>: standard 64-char hex key holding Base USDC</div>
+            <p><code className="text-white">BASE_NETWORK</code>: base or base-sepolia; match the gateway's RELAY_NETWORK.</p>
+            <p><code className="text-white">AGENT_PRIVATE_KEY</code>: keep the wallet key local. Never use a VITE_ variable for secrets.</p>
+            <p>Zero budgets disable payments. Set both MAX_PAYMENT_USDC and MAX_DAILY_BUDGET_USDC to explicit limits only when authorized to spend.</p>
+            <p>Reservations persist in ~/.relay/mcp-budget.json; RELAY_BUDGET_FILE can select an absolute path. Uncertain payments remain reserved until reconciled.</p>
           </div>
+          <p className="text-xs text-neutral-400">For a terminal launch from the repository, use <code>npm run mcp</code>. Desktop clients should use the direct Node launcher above so stdout contains only MCP messages.</p>
+          <p className="text-xs text-amber-300">These instructions target the corrected repository. Deploy the new gateway before using it with a hosted URL.</p>
+          {copyError && <p role="status" className="text-xs text-amber-300">{copyError}</p>}
         </div>
 
         {/* Footer */}
@@ -94,7 +114,6 @@ export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }
             Close
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };

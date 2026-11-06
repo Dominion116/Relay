@@ -22,7 +22,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     {
       question: 'What is Relay and how does it work?',
       answer:
-        'Relay is an open pay-per-use capability infrastructure for autonomous AI agents and developers. Instead of locking into monthly subscriptions or managing private API keys, agents pay per individual request directly in micro-USDC using the RFC x402 payment protocol on Base.'
+        'Relay is a pay-per-use data gateway for AI agents and developers. Requests use the x402 v2 HTTP payment flow and exact USDC authorizations on the configured Base network. The corrected protocol requires a deployment of this repository; older hosted builds may differ.'
     },
     {
       question: 'How do payments settle without holding ETH for gas?',
@@ -32,22 +32,22 @@ export const HomePage: React.FC<HomePageProps> = ({
     {
       question: 'Do I need an account, credit card, or API key?',
       answer:
-        'No. Relay requires zero accounts, credit cards, or pre-provisioned developer keys. Any agent or client with a funded Base wallet can discover available endpoints via the machine manifest (/.well-known/x402.json) and execute capability requests immediately.'
+        'No Relay account, credit card, or API key is required. The gateway manifest at /.well-known/x402 lists available endpoints. Payment requires a wallet on the configured network; SDK and MCP clients also require explicit spending limits.'
     },
     {
       question: 'What data capabilities are currently live on Relay?',
       answer:
-        'Relay provides 12 production endpoints across five primary categories: academic literature search and DOI retrieval (OpenAlex), cryptocurrency spot prices and market metrics (Binance), foreign exchange reference rates (Frankfurter / ECB), weather forecasts and geocoding (Open-Meteo and Photon), public holiday verification (Nager.Date), Wikidata entity lookups, real-time news headlines, and deterministic multi-source research packs.'
+        'The catalog includes OpenAlex academic search and DOI lookup, CoinGecko prices and market metrics, ECB reference FX rates, coordinate-based weather, forward geocoding, public holidays, Wikidata entities, recent Hacker News coverage, and multi-source research. Claim lookup returns search evidence, not a factual verdict or a confidence score.'
     },
     {
       question: 'How do autonomous agents and LLMs integrate with Relay?',
       answer:
-        'Agents can connect to Relay using our native Model Context Protocol (MCP) server for Claude Desktop, Cursor, and Windsurf, or programmatically via lightweight TypeScript/Viem and Python SDK snippets. All requests follow standardized JSON schemas with predictable, verified outputs.'
+        'Use the repository-local TypeScript SDK or stdio MCP server. Both call the HTTP gateway and validate canonical x402 v2 requirements before signing. The documentation includes local launch commands and explicit budget settings; no public Relay npm package is required.'
     },
     {
       question: 'Which blockchain networks and settlement assets are supported?',
       answer:
-        'Relay operates strictly on Base Mainnet (Chain ID 8453), settling exclusively in native Circle USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913).'
+        'The gateway and client must be configured for the same network: Base Mainnet (8453) or Base Sepolia (84532), using that network\'s official USDC contract. Sepolia is a test network; its test tokens are not mainnet USDC.'
     }
   ];
 
@@ -69,8 +69,8 @@ export const HomePage: React.FC<HomePageProps> = ({
         title={'Programmatic Data & Capabilities\nfor AI Agents on Base'}
         description={'Pay per API request in micro-USDC with zero subscriptions,\ncredit cards, or API keys. Reviving HTTP 402 on Coinbase L2.'}
         eyebrowText="Live x402 Micropayments on Base"
-        emailPlaceholder="Try: bitcoin price, weather in tokyo, quantum computing"
-        submitText="Execute x402"
+        emailPlaceholder="Search papers: quantum computing, zero-knowledge proofs"
+        submitText="Explore papers"
         ctaText="Interactive Playground"
         onCtaClick={() => onNavigate('playground')}
         onNavigate={handleNav}
@@ -183,14 +183,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Check className="size-3 text-blue-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Autonomous toolchain ready:</strong> Instant plug-and-play with Coinbase AgentKit, CDP Wallets, Cursor, and Claude via native MCP.
+                        <strong className="font-medium text-neutral-100">Explicit agent payment policies:</strong> Repository-local SDK and stdio MCP integration with per-call and daily spending limits.
                       </div>
                     </li>
                   </ul>
                 </div>
 
                 <div className="mt-8 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-400">
-                  <span className="text-blue-400">Billing: Per request ($0.01 - $0.12)</span>
+                  <span className="text-blue-400">Billing: Per request ($0.04 - $0.12)</span>
                   <span className="text-neutral-300">Setup: Zero accounts</span>
                 </div>
               </div>
@@ -269,7 +269,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
                 <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">
                   <span className="text-neutral-500 block mb-0.5">Header proof:</span>
-                  <code className="text-blue-400">X-Payment-Proof: 0x...</code>
+                  <code className="text-blue-400 break-all">PAYMENT-SIGNATURE: base64(proof)</code>
                 </div>
               </div>
 
@@ -284,7 +284,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                   <h3 className="text-base font-medium text-neutral-100 mb-2">HTTP 200 fulfilled</h3>
                   <p className="text-sm text-neutral-400 leading-relaxed font-sans">
-                    Gateway validates cryptographic proof on Base and delivers authoritative live data payload in sub-second time.
+                    Gateway verifies authorization, retrieves provider data, and returns it only after confirmed settlement. Pending outcomes remain unconfirmed.
                   </p>
                 </div>
                 <div className="mt-5 pt-3 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400 bg-black/40 rounded-lg p-2.5 border border-neutral-800">

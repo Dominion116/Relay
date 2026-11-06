@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { FaArrowRight, FaXmark } from 'react-icons/fa6';
+import { relayChain, relayNetworkLabel } from '../config/wagmi';
 
 export interface HeaderNavProps {
   currentPage: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs';
@@ -74,7 +75,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             {/* Network pill - Base Mainnet Only */}
             <div className="inline-flex min-h-8 items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/80 px-3.5 text-xs font-medium text-neutral-300">
               <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
-              <span>Base Mainnet</span>
+              <span>{relayNetworkLabel}</span>
             </div>
 
             {/* Test CTA */}
@@ -141,7 +142,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
 
               <div className="mt-4 pt-3 border-t border-neutral-800 flex items-center justify-between">
                 <span className="text-xs text-neutral-400">Network</span>
-                <span className="text-xs font-mono font-medium text-blue-400">Base (8453)</span>
+                <span className="text-xs font-mono font-medium text-blue-400">{relayNetworkLabel} ({relayChain.id})</span>
               </div>
             </motion.div>
           ) : null}

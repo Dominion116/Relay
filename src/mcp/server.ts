@@ -3,7 +3,7 @@
  * Relay Official MCP (Model Context Protocol) Stdio Server
  *
  * Runs locally for Claude Desktop, Cursor, Windsurf, or any agent framework.
- * Tools execute with live x402 settlement on Base.
+ * Tools use the configured HTTP gateway and explicit, persistent payment budgets.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -27,7 +27,7 @@ async function main() {
     }
   );
 
-  // List all 12 live capabilities
+  // Discovery stays usable without a configured payer or spending authorization.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = getMcpToolsList();
     return {
@@ -39,7 +39,7 @@ async function main() {
     };
   });
 
-  // Execute tool with live x402 flow
+  // The SDK performs the canonical HTTP exchange; this process never executes providers.
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args = {} } = request.params;
     try {
@@ -60,7 +60,7 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Relay MCP Server running on stdio (Base L2 x402 enabled)');
+  console.error('Relay MCP Server running on stdio (paid tools require explicit wallet and budget configuration)');
 }
 
 main().catch((err) => {

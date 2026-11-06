@@ -1,12 +1,10 @@
 import esbuild from 'esbuild';
 import fs from 'fs';
-import path from 'path';
 
 async function buildApi() {
   console.log('Building serverless API functions for Vercel...');
 
   fs.mkdirSync('api/well-known', { recursive: true });
-  fs.mkdirSync('api/v1', { recursive: true });
 
   await esbuild.build({
     entryPoints: {
@@ -15,13 +13,13 @@ async function buildApi() {
     },
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node24',
     format: 'esm',
     outdir: 'api',
     packages: 'external'
   });
 
-  console.log('API bundle build complete: api/well-known/x402.js & api/v1/[...route].js');
+  console.log('API bundle build complete: api/well-known/x402.js & api/v1.js');
 }
 
 buildApi().catch(err => {

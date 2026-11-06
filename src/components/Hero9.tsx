@@ -110,7 +110,7 @@ export function Hero9({
   avatars = defaultAvatars,
   title = 'Programmatic Data & Capabilities\nfor AI Agents on Base',
   description = 'Pay per API request in micro-USDC with zero subscriptions,\ncredit cards, or API keys. Reviving HTTP 402 for autonomous agents.',
-  emailPlaceholder = 'Try query: "bitcoin price" or "quantum computing"',
+  emailPlaceholder = 'Search papers: quantum computing',
   formAction = '#',
   submitText = 'Execute x402',
   backgroundImage = defaultBackground,
@@ -131,7 +131,7 @@ export function Hero9({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (onSubmitForm) {
-      onSubmitForm(inputValue || 'bitcoin price');
+      onSubmitForm(inputValue.trim() || 'quantum computing');
     } else if (onNavigate) {
       onNavigate('#playground');
     }
@@ -329,7 +329,7 @@ export function Hero9({
             className="mt-6 flex w-full max-w-md flex-col gap-1.5 rounded-[28px] bg-white/26 p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_50px_rgba(255,255,255,0.34),inset_0_1px_0_rgba(255,255,255,0.55)] outline-1 outline-white/45 backdrop-blur-[1px] min-[430px]:flex-row min-[430px]:rounded-full"
           >
             <label htmlFor="hero9-email" className="sr-only">
-              Search or Query
+              Academic search query
             </label>
             <input
               id="hero9-email"
