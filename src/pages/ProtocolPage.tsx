@@ -87,7 +87,7 @@ export const ProtocolPage: React.FC<ProtocolPageProps> = ({
             <p className="text-[15px] leading-relaxed text-neutral-400 max-w-2xl">
               A standardized micropayment handshake reviving HTTP status 402 for autonomous AI agents. Built on Base EVM and ERC-3009 gasless authorization primitives.
             </p>
-            <p className="mt-3 text-xs text-amber-300">This specification describes the corrected repository. Deploy the new gateway before relying on these headers at a hosted URL.</p>
+            <p className="mt-3 text-xs text-neutral-400 font-mono">Standard x402 v2 payment wire protocol with native Base USDC (ERC-3009) and Primer Systems public facilitator.</p>
             {copyError && <p role="status" className="mt-3 text-xs text-amber-300">{copyError}</p>}
             <div className="mt-8 flex flex-wrap gap-3">
               <button

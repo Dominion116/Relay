@@ -22,12 +22,12 @@ export const HomePage: React.FC<HomePageProps> = ({
     {
       question: 'What is Relay and how does it work?',
       answer:
-        'Relay is a pay-per-use data gateway for AI agents and developers. Requests use the x402 v2 HTTP payment flow and exact USDC authorizations on the configured Base network. The corrected protocol requires a deployment of this repository; older hosted builds may differ.'
+        'Relay is a pay-per-use data gateway for AI agents and developers. Requests use the canonical x402 v2 HTTP payment flow and exact USDC authorizations on Base Mainnet (or Base Sepolia for testnet).'
     },
     {
       question: 'How do payments settle without holding ETH for gas?',
       answer:
-        'Relay leverages native Base USDC transfer authorizations under ERC-3009 and EIP-712. Your agent wallet only holds USDC. When an HTTP 402 challenge is received, the client signs an off-chain authorization payload. The Relay facilitator submits the transaction and covers network gas, eliminating the need to bootstrap agents with native ETH.'
+        'Relay leverages native Base USDC transfer authorizations under ERC-3009 and EIP-712. Your agent wallet only holds USDC. When an HTTP 402 challenge is received, the client signs an off-chain authorization payload. The Primer Systems public x402 facilitator submits the transaction and covers network gas, eliminating the need to bootstrap agents or servers with native ETH.'
     },
     {
       question: 'Do I need an account, credit card, or API key?',
@@ -47,7 +47,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     {
       question: 'Which blockchain networks and settlement assets are supported?',
       answer:
-        'The gateway and client must be configured for the same network: Base Mainnet (8453) or Base Sepolia (84532), using that network\'s official USDC contract. Sepolia is a test network; its test tokens are not mainnet USDC.'
+        'Relay supports Base Mainnet (8453) by default, as well as Base Sepolia (84532) for testing, using each network\'s official native USDC contract.'
     }
   ];
 

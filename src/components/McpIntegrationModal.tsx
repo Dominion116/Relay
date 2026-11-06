@@ -19,9 +19,9 @@ export const MCP_LOCAL_CONFIG = `{
       ],
       "env": {
         "AGENT_PRIVATE_KEY": "YOUR_LOCAL_WALLET_PRIVATE_KEY",
-        "BASE_NETWORK": "base-sepolia",
-        "GATEWAY_ORIGIN": "http://localhost:5173",
-        "RELAY_TREASURY_ADDRESS": "YOUR_CONFIGURED_TREASURY_ADDRESS",
+        "BASE_NETWORK": "base",
+        "GATEWAY_ORIGIN": "https://relayx402.vercel.app",
+        "RELAY_TREASURY_ADDRESS": "0x420f9F9deA7fA318eA8996C8aA00ad9738D98072",
         "MAX_PAYMENT_USDC": "0",
         "MAX_DAILY_BUDGET_USDC": "0"
       }
@@ -95,13 +95,13 @@ export const McpIntegrationModal: React.FC<McpModalProps> = ({ isOpen, onClose }
 
           <div className="rounded-xl bg-neutral-900/60 border border-neutral-800 p-4 text-xs font-mono text-neutral-300 space-y-1.5">
             <div className="font-semibold text-neutral-200 uppercase tracking-wide text-[11px]">Environment requirements</div>
-            <p><code className="text-white">BASE_NETWORK</code>: base or base-sepolia; match the gateway's RELAY_NETWORK.</p>
+            <p><code className="text-white">BASE_NETWORK</code>: base (Base Mainnet) or base-sepolia (testnet); match the gateway's RELAY_NETWORK.</p>
             <p><code className="text-white">AGENT_PRIVATE_KEY</code>: keep the wallet key local. Never use a VITE_ variable for secrets.</p>
             <p>Zero budgets disable payments. Set both MAX_PAYMENT_USDC and MAX_DAILY_BUDGET_USDC to explicit limits only when authorized to spend.</p>
             <p>Reservations persist in ~/.relay/mcp-budget.json; RELAY_BUDGET_FILE can select an absolute path. Uncertain payments remain reserved until reconciled.</p>
           </div>
           <p className="text-xs text-neutral-400">For a terminal launch from the repository, use <code>npm run mcp</code>. Desktop clients should use the direct Node launcher above so stdout contains only MCP messages.</p>
-          <p className="text-xs text-amber-300">These instructions target the corrected repository. Deploy the new gateway before using it with a hosted URL.</p>
+          <p className="text-xs text-neutral-400">Relay MCP connects to the gateway via the canonical x402 v2 protocol. Ensure the gateway URL matches your active deployment.</p>
           {copyError && <p role="status" className="text-xs text-amber-300">{copyError}</p>}
         </div>
 

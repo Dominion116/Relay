@@ -1,8 +1,8 @@
 # Relay
 
-Pay-per-request data for AI agents and developers, using canonical x402 v2 and USDC on Base.
+Pay-per-request data for AI agents and developers, using canonical x402 v2 and USDC on Base. Powered by the Primer Systems public x402 facilitator for gasless settlement.
 
-**Deployment status:** this README describes the corrected repository. The existing site at https://relayx402.vercel.app/ is not automatically updated by local changes. Deploy the corrected gateway separately before using these clients against that hosted URL. No deployment or real payment is part of the remediation tests.
+**Deployment status:** Relay is configured for Base Mainnet (`base`) by default and supports Base Sepolia (`base-sepolia`) for testing. Production payments settle gaslessly via the Primer Systems public x402 facilitator.
 
 ## Local Setup
 
@@ -15,7 +15,7 @@ npm run dev
 
 The application and development gateway are available at `http://localhost:5173`. The Playground calls the HTTP gateway, not provider or payment-engine functions imported into the browser. Discovery at `/.well-known/x402` is free.
 
-The gateway must be configured before a paid request can settle. Begin with Base Sepolia and explicit zero client budgets. Never place wallet or facilitator private keys in a `VITE_` variable; every `VITE_` value is public browser configuration.
+The gateway can be configured for Base Mainnet (default) or Base Sepolia. Begin with explicit client budgets. Never place wallet or private keys in a `VITE_` variable; every `VITE_` value is public browser configuration.
 
 | Setting | Used By | Purpose |
 |---|---|---|
@@ -36,19 +36,22 @@ The gateway must be configured before a paid request can settle. Begin with Base
 | `MAX_DAILY_BUDGET_USDC` | Local SDK/MCP | Explicit daily ceiling; missing or zero disables payments |
 | `RELAY_BUDGET_FILE` | MCP | Optional absolute ledger path outside the checkout; defaults to `~/.relay/mcp-budget.json` |
 
-An example public network configuration is:
+An example configuration for Base Mainnet is:
 
 ```text
-RELAY_NETWORK=base-sepolia
-GATEWAY_ORIGIN=http://localhost:5173
-VITE_BASE_NETWORK=base-sepolia
-VITE_GATEWAY_URL=http://localhost:5173
-BASE_NETWORK=base-sepolia
+RELAY_NETWORK=base
+RELAY_TREASURY_ADDRESS=0x420f9F9deA7fA318eA8996C8aA00ad9738D98072
+FACILITATOR_URL=https://x402.primer.systems
+GATEWAY_ORIGIN=https://relayx402.vercel.app
+VITE_BASE_NETWORK=base
+VITE_RELAY_TREASURY_ADDRESS=0x420f9F9deA7fA318eA8996C8aA00ad9738D98072
+VITE_GATEWAY_URL=https://relayx402.vercel.app
+BASE_NETWORK=base
 MAX_PAYMENT_USDC=0
 MAX_DAILY_BUDGET_USDC=0
 ```
 
-Set the matching treasury addresses and secret keys only in the relevant local/server environment. A wrong network, merchant, token, resource, or amount is rejected before signing. An unfunded or unavailable facilitator cannot produce a successful settlement receipt.
+Set the matching treasury addresses and secret keys only in the relevant local/server environment. A wrong network, merchant, token, resource, or amount is rejected before signing. Relay uses the Primer Systems public x402 facilitator (`https://x402.primer.systems`) by default on Base Mainnet and Base Sepolia, requiring zero server gas funding. Alternatively, a self-hosted facilitator can be configured with `RELAY_FACILITATOR_KEY`.
 
 ## Endpoints And Prices
 
@@ -103,7 +106,7 @@ The successful `PAYMENT-RESPONSE` contains `success: true`, `transaction`, `netw
 | Base Mainnet | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | `USD Coin`, version `2` |
 | Base Sepolia | 84532 | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | `USDC`, version `2` |
 
-Sepolia tokens are test tokens, not mainnet USDC. No ETH is required in the payer wallet for an off-chain authorization; the configured facilitator needs gas to submit it.
+Sepolia tokens are test tokens, not mainnet USDC. No ETH is required in the payer wallet or on the server for an off-chain authorization; the Primer Systems public facilitator submits the transaction and covers execution gas.
 
 ## Repository-Local SDK
 
@@ -114,9 +117,9 @@ import { RelayClient } from './src/sdk/index.ts';
 
 const relay = new RelayClient({
   privateKey: process.env.AGENT_PRIVATE_KEY || '',
-  gatewayUrl: process.env.GATEWAY_ORIGIN || 'http://localhost:5173',
-  network: 'base-sepolia',
-  treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '',
+  gatewayUrl: process.env.GATEWAY_ORIGIN || 'https://relayx402.vercel.app',
+  network: (process.env.BASE_NETWORK as 'base' | 'base-sepolia') || 'base',
+  treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072',
   maxPaymentUsdc: process.env.MAX_PAYMENT_USDC || '0',
   maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0'
 });
@@ -128,7 +131,7 @@ console.log(settlement, data);
 This complete command runs from the repository root with the same configured environment:
 
 ```sh
-node --env-file-if-exists=.env --import tsx --input-type=module -e "import { RelayClient } from './src/sdk/index.ts'; const relay = new RelayClient({ privateKey: process.env.AGENT_PRIVATE_KEY || '', gatewayUrl: process.env.GATEWAY_ORIGIN || 'http://localhost:5173', network: 'base-sepolia', treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '', maxPaymentUsdc: process.env.MAX_PAYMENT_USDC || '0', maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0' }); console.log(await relay.crypto.price(['bitcoin'], 'eur'));"
+node --env-file-if-exists=.env --import tsx --input-type=module -e "import { RelayClient } from './src/sdk/index.ts'; const relay = new RelayClient({ privateKey: process.env.AGENT_PRIVATE_KEY || '', gatewayUrl: process.env.GATEWAY_ORIGIN || 'https://relayx402.vercel.app', network: (process.env.BASE_NETWORK as any) || 'base', treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072', maxPaymentUsdc: process.env.MAX_PAYMENT_USDC || '0', maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0' }); console.log(await relay.crypto.price(['bitcoin'], 'eur'));"
 ```
 
 For example, limits of `0.12` per call and `5` per UTC day permit calls within those ceilings. Set those values only when authorized to spend. The SDK pins exact catalog prices unless an explicit per-call price policy permits otherwise. Reservations prevent concurrent calls from exceeding a budget. Its default ledger is process-local; long-running applications can provide a budget store. MCP uses a persistent store by default.
@@ -143,7 +146,7 @@ For a terminal launch from the checkout:
 npm run mcp
 ```
 
-For Claude Desktop or Cursor, use a direct Node stdio launcher so npm banners do not contaminate protocol output. Replace both absolute paths and the private-key/treasury placeholders. This Windows example uses Base Sepolia and deliberately disables payment until both budgets are configured:
+For Claude Desktop or Cursor, use a direct Node stdio launcher so npm banners do not contaminate protocol output. Replace both absolute paths and the private-key/treasury placeholders. This configuration uses Base Mainnet by default (or set `BASE_NETWORK` to `base-sepolia` for testnet):
 
 ```json
 {
@@ -157,9 +160,9 @@ For Claude Desktop or Cursor, use a direct Node stdio launcher so npm banners do
       ],
       "env": {
         "AGENT_PRIVATE_KEY": "YOUR_LOCAL_WALLET_PRIVATE_KEY",
-        "BASE_NETWORK": "base-sepolia",
-        "GATEWAY_ORIGIN": "http://localhost:5173",
-        "RELAY_TREASURY_ADDRESS": "YOUR_CONFIGURED_TREASURY_ADDRESS",
+        "BASE_NETWORK": "base",
+        "GATEWAY_ORIGIN": "https://relayx402.vercel.app",
+        "RELAY_TREASURY_ADDRESS": "0x420f9F9deA7fA318eA8996C8aA00ad9738D98072",
         "MAX_PAYMENT_USDC": "0",
         "MAX_DAILY_BUDGET_USDC": "0"
       }
@@ -203,4 +206,4 @@ npm run test:browser
 
 Automated regressions use mocked provider/RPC transports and test-only accounts. Browser checks build `.browser-dist` without reading `.env`, use fixed local gateway settings, isolated unconnected browser contexts, and unpaid HTTP requests. Wallet approval, external service availability, and real on-chain settlement require separate verification. A production build does not deploy the application or prove the currently hosted version uses the corrected protocol.
 
-The gateway requires two L2 confirmations through its configured RPC, not L1 finality. Pending transaction metadata is process-local and denial-only; it is not a durable fulfillment ledger. For a multi-instance production deployment, use a dedicated serialized facilitator signer or shared nonce coordination, and provide operator reconciliation for uncertain transactions. See `REMEDIATION_PLAN.md` for validation results and unresolved upstream dependency advisories.
+The gateway requires two L2 confirmations through its configured RPC, not L1 finality. Pending transaction metadata is process-local and denial-only; it is not a durable fulfillment ledger. When using the default Primer Systems public facilitator (`https://x402.primer.systems`), multi-instance nonce allocation and gas sponsorship are handled externally. For self-hosted deployments, use a dedicated serialized facilitator signer or shared nonce coordination.

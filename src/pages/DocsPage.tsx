@@ -15,9 +15,9 @@ export const SDK_EXAMPLE = `import { RelayClient } from './src/sdk/index.ts';
 
 const relay = new RelayClient({
   privateKey: process.env.AGENT_PRIVATE_KEY || '',
-  gatewayUrl: process.env.GATEWAY_ORIGIN || 'http://localhost:5173',
-  network: 'base-sepolia',
-  treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '',
+  gatewayUrl: process.env.GATEWAY_ORIGIN || 'https://relayx402.vercel.app',
+  network: (process.env.BASE_NETWORK as 'base' | 'base-sepolia') || 'base',
+  treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072',
   maxPaymentUsdc: process.env.MAX_PAYMENT_USDC || '0',
   maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0'
 });
@@ -27,11 +27,11 @@ const { settlement, data } = await relay.crypto.price(['bitcoin', 'ethereum'], '
 console.log('Confirmed receipt:', settlement);
 console.log('Requested EUR prices:', data);`;
 
-export const SDK_LAUNCH_COMMAND = `node --env-file-if-exists=.env --import tsx --input-type=module -e "import { RelayClient } from './src/sdk/index.ts'; const relay = new RelayClient({ privateKey: process.env.AGENT_PRIVATE_KEY || '', gatewayUrl: process.env.GATEWAY_ORIGIN || 'http://localhost:5173', network: 'base-sepolia', treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '', maxPaymentUsdc: process.env.MAX_PAYMENT_USDC || '0', maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0' }); console.log(await relay.crypto.price(['bitcoin'], 'eur'));"`;
+export const SDK_LAUNCH_COMMAND = `node --env-file-if-exists=.env --import tsx --input-type=module -e "import { RelayClient } from './src/sdk/index.ts'; const relay = new RelayClient({ privateKey: process.env.AGENT_PRIVATE_KEY || '', gatewayUrl: process.env.GATEWAY_ORIGIN || 'https://relayx402.vercel.app', network: (process.env.BASE_NETWORK as any) || 'base', treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072', maxPaymentUsdc: process.env.MAX_PAYMENT_USDC || '0', maxDailyBudgetUsdc: process.env.MAX_DAILY_BUDGET_USDC || '0' }); console.log(await relay.crypto.price(['bitcoin'], 'eur'));"`;
 
 export const VIEM_EXAMPLE = `import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
+import { base, baseSepolia } from 'viem/chains';
 import {
   decodePaymentHeader, validatePaymentChallenge, createPaymentAuthorization,
   createPaymentPayload, encodePaymentHeader, validateSettlementResponse
@@ -42,14 +42,16 @@ import {
 if (process.env.CONFIRM_SINGLE_PAYMENT_USDC !== '0.04') {
   throw new Error('Set CONFIRM_SINGLE_PAYMENT_USDC=0.04 only when authorized.');
 }
+const network = (process.env.BASE_NETWORK as 'base' | 'base-sepolia') || 'base';
+const chain = network === 'base' ? base : baseSepolia;
 const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY as \`0x\${string}\`);
-const wallet = createWalletClient({ account, chain: baseSepolia, transport: http() });
-const gatewayUrl = process.env.GATEWAY_ORIGIN || 'http://localhost:5173';
+const wallet = createWalletClient({ account, chain, transport: http() });
+const gatewayUrl = process.env.GATEWAY_ORIGIN || 'https://relayx402.vercel.app';
 const endpoint = '/v1/crypto/price';
 const body = JSON.stringify({ assets: ['bitcoin'], vsCurrency: 'eur' });
 const policy = {
-  gatewayUrl, endpoint, network: 'base-sepolia' as const,
-  treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '',
+  gatewayUrl, endpoint, network,
+  treasuryAddress: process.env.RELAY_TREASURY_ADDRESS || '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072',
   expectedAmount: '40000'
 };
 
@@ -136,7 +138,7 @@ export const DocsPage: React.FC<DocsPageProps> = ({ onNavigate, onOpenMcp, onOpe
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
         <aside className="hidden lg:block lg:col-span-3 sticky top-24 min-w-0">{navigation('desktop')}<button type="button" onClick={() => onNavigate('playground')} className="mt-6 w-full rounded-full bg-neutral-100 text-neutral-950 px-4 py-2 text-xs font-medium">Open Playground</button></aside>
         <article className="lg:col-span-6 min-w-0 space-y-16 text-neutral-400 leading-relaxed text-[14px]">
-          <header className="space-y-4"><span className="inline-flex rounded-full bg-neutral-900/80 px-3 py-1 text-xs font-mono border border-neutral-800">Relay Documentation</span><h1 className="text-3xl sm:text-4xl font-medium tracking-tight text-neutral-100">Building with Relay on Base</h1><p>Pay-per-request data over canonical x402 v2. The browser, local SDK, and MCP server call the same HTTP gateway.</p><p role="note" className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs">These instructions describe the corrected repository. The current hosted deployment is not automatically updated. Deploy the corrected gateway before using these clients against a hosted URL.</p></header>
+          <header className="space-y-4"><span className="inline-flex rounded-full bg-neutral-900/80 px-3 py-1 text-xs font-mono border border-neutral-800">Relay Documentation</span><h1 className="text-3xl sm:text-4xl font-medium tracking-tight text-neutral-100">Building with Relay on Base</h1><p>Pay-per-request data over canonical x402 v2. The browser, local SDK, and MCP server call the same HTTP gateway.</p><p role="note" className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-200 text-xs">Relay implements canonical x402 v2 exact payment settlement with native USDC on Base. Powered by Primer Systems public facilitator with zero gas bootstrapping required.</p></header>
 
           <section id="quickstart" className={sectionClass}>
             <h2 className={headingClass}>Quickstart</h2>
