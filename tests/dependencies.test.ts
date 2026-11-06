@@ -21,3 +21,34 @@ test('legacy MetaMask consumers resolve patched UUID with compatible named and C
     assert.equal(typeof esm.validate, 'function');
   }
 });
+
+test('query-string resolves patched decode-uri-component with dual CommonJS and ESM support and quadratic DoS protection', async () => {
+  const qs = require('query-string');
+  const parsed = qs.parse('?search=Relay%20Protocol&tag=%C2%B5USDC');
+  assert.equal(parsed.search, 'Relay Protocol');
+  assert.equal(parsed.tag, 'µUSDC');
+
+  const qsRequire = createRequire(require.resolve('query-string'));
+  const decode = qsRequire('decode-uri-component');
+  assert.equal(typeof decode, 'function');
+  assert.equal(decode('Relay%20Protocol'), 'Relay Protocol');
+  assert.equal(decode('%FE%FFhello'), '\uFFFD\uFFFDhello');
+
+  // Verify quadratic DoS protection completes in bounded time
+  const start = Date.now();
+  const res = decode('%25'.repeat(20000));
+  assert.ok(Date.now() - start < 1000);
+  assert.ok(typeof res === 'string');
+
+  const esm = await import(pathToFileURL(qsRequire.resolve('decode-uri-component')).href);
+  assert.equal(typeof esm.default, 'function');
+  assert.equal(esm.default('Relay%20Protocol'), 'Relay Protocol');
+});
+
+test('zod resolves patched 4.6.7 across wallet consumers', async () => {
+  for (const consumer of ['@coinbase/cdp-sdk', '@reown/appkit-wallet']) {
+    const consumerRequire = createRequire(require.resolve(consumer));
+    const zodPkg = consumerRequire('zod/package.json');
+    assert.equal(zodPkg.version, '4.6.7', consumer);
+  }
+});
