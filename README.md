@@ -21,7 +21,8 @@ The gateway must be configured before a paid request can settle. Begin with Base
 |---|---|---|
 | `RELAY_NETWORK` | Gateway | `base` or `base-sepolia`; defaults to mainnet |
 | `RELAY_TREASURY_ADDRESS` | Gateway and SDK/MCP | Trusted merchant address; match the browser setting |
-| `RELAY_FACILITATOR_KEY` | Gateway only | Local server signer that submits USDC authorizations and pays gas |
+| `FACILITATOR_URL` | Gateway only | Public x402 facilitator endpoint (defaults to Primer Systems `https://x402.primer.systems`) |
+| `RELAY_FACILITATOR_KEY` | Gateway only | Optional local server signer that submits USDC authorizations and pays gas (self-hosted mode) |
 | `BASE_RPC_URL` | Gateway only | RPC for the configured chain |
 | `GATEWAY_ORIGIN` | Gateway and SDK/MCP | Exact public gateway origin; use `http://localhost:5173` locally |
 | `VITE_BASE_NETWORK` | Browser | Must match `RELAY_NETWORK` |

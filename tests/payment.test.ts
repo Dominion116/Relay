@@ -22,7 +22,8 @@ for (const name of ['node:http', 'node:https']) {
   require(name).get = denyNetwork;
 }
 syncBuiltinESMExports();
-for (const name of ['RELAY_FACILITATOR_KEY', 'AGENT_PRIVATE_KEY', 'BASE_PRIVATE_KEY', 'RELAY_TREASURY_ADDRESS']) delete process.env[name];
+process.env.NODE_ENV = 'test';
+for (const name of ['RELAY_FACILITATOR_KEY', 'FACILITATOR_URL', 'AGENT_PRIVATE_KEY', 'BASE_PRIVATE_KEY', 'RELAY_TREASURY_ADDRESS']) delete process.env[name];
 process.env.RELAY_NETWORK = 'base';
 process.env.GATEWAY_ORIGIN = 'https://relay-payment-test.invalid';
 process.env.BASE_RPC_URL = 'https://rpc-payment-test.invalid';
@@ -163,6 +164,7 @@ async function proofFor(selected: X402Resource = resource, changes: Record<strin
 beforeEach(() => {
   mode = 'success'; chainId = 8453; rpcFailure = false; sent = []; calls = []; consumed = new Set(); receipts = new Map();
   resetAssetContractCache();
+  delete process.env.FACILITATOR_URL;
   process.env.RELAY_FACILITATOR_KEY = facilitatorKey;
   process.env.BASE_RPC_URL = 'https://rpc-payment-test.invalid';
   process.env.RELAY_SETTLEMENT_TIMEOUT_MS = '150';

@@ -1,6 +1,7 @@
 // src/server/x402Engine.ts
 import { randomBytes } from "node:crypto";
 import { PaymentPayloadV2Schema, PaymentRequirementsV2Schema, z } from "@x402/core/schemas";
+import { HTTPFacilitatorClient } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/facilitator";
 import { eip3009ABI } from "@x402/evm";
 import {
@@ -871,9 +872,10 @@ function failure(errorCode, payer = "", amount = "0") {
   return { valid: false, payer, amount, errorCode, error: messages[errorCode] };
 }
 function reasonCode(reason) {
-  if (reason === "invalid_exact_evm_nonce_already_used") return "payment_replayed";
-  if (reason === "invalid_exact_evm_payload_authorization_valid_before") return "payment_expired";
-  if (reason === "invalid_exact_evm_payload_authorization_valid_after") return "payment_not_yet_valid";
+  if (!reason) return "invalid_payment";
+  if (reason === "invalid_exact_evm_nonce_already_used" || reason.includes("nonce_already_used") || reason === "payment_replayed") return "payment_replayed";
+  if (reason === "invalid_exact_evm_payload_authorization_valid_before" || reason.includes("valid_before") || reason === "payment_expired") return "payment_expired";
+  if (reason === "invalid_exact_evm_payload_authorization_valid_after" || reason.includes("valid_after") || reason === "payment_not_yet_valid") return "payment_not_yet_valid";
   if (reason === "invalid_exact_evm_failed_to_verify_signature" || reason === "invalid_exact_evm_transaction_simulation_failed") {
     return "payment_verification_unavailable";
   }
@@ -969,9 +971,30 @@ async function serializeSend(key, send) {
     if (nonceQueues.get(key) === tail) nonceQueues.delete(key);
   }
 }
+var PRIMER_FACILITATOR_URL = "https://x402.primer.systems";
+function getFacilitatorTarget() {
+  const url = process.env.FACILITATOR_URL;
+  if (url) {
+    if (url === "self-hosted" || url === "local") {
+      const key = process.env.RELAY_FACILITATOR_KEY;
+      if (!key) throw new PaymentError("payment_configuration_error");
+      return { type: "local", key };
+    }
+    return { type: "http", url };
+  }
+  if (process.env.RELAY_FACILITATOR_KEY) {
+    return { type: "local", key: process.env.RELAY_FACILITATOR_KEY };
+  }
+  if (process.env.NODE_ENV === "test") {
+    throw new PaymentError("payment_configuration_error");
+  }
+  return { type: "http", url: PRIMER_FACILITATOR_URL };
+}
 function createFacilitator(resource, proof, attempt) {
-  const key = process.env.RELAY_FACILITATOR_KEY;
-  const normalizedKey = key?.startsWith("0x") ? key : `0x${key ?? ""}`;
+  const target = getFacilitatorTarget();
+  if (target.type !== "local") throw new PaymentError("payment_configuration_error");
+  const key = target.key;
+  const normalizedKey = key.startsWith("0x") ? key : `0x${key}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(normalizedKey)) throw new PaymentError("payment_configuration_error");
   let account;
   try {
@@ -1065,6 +1088,65 @@ async function verifyOnChain(context, proof, requirements) {
   const result = await context.scheme.verify(proof, requirements);
   return result.isValid ? { valid: true, payer: auth.from, amount: requirements.amount } : failure(reasonCode(result.invalidReason), auth.from, requirements.amount);
 }
+async function verifyWithHttpFacilitator(url, proof, requirements) {
+  const auth = proof.payload.authorization;
+  const timeoutMs = Number(process.env.RELAY_SETTLEMENT_TIMEOUT_MS ?? 15e3);
+  const client = new HTTPFacilitatorClient({ url, timeoutMs: Math.min(Math.max(timeoutMs, 1e3), 3e4) });
+  try {
+    const result = await client.verify(proof, requirements);
+    if (result.isValid) {
+      return { valid: true, payer: auth.from, amount: requirements.amount };
+    }
+    return failure(reasonCode(result.invalidReason), auth.from, requirements.amount);
+  } catch (error) {
+    const invalidReason = error?.invalidReason ?? error?.response?.data?.invalidReason;
+    if (invalidReason) {
+      return failure(reasonCode(invalidReason), auth.from, requirements.amount);
+    }
+    return failure("payment_verification_unavailable", auth.from, requirements.amount);
+  }
+}
+async function settleWithHttpFacilitator(url, proof, requirements) {
+  const auth = proof.payload.authorization;
+  const timeoutMs = Number(process.env.RELAY_SETTLEMENT_TIMEOUT_MS ?? 15e3);
+  const client = new HTTPFacilitatorClient({ url, timeoutMs: Math.min(Math.max(timeoutMs, 1e3), 3e4) });
+  let settled;
+  try {
+    settled = await client.settle(proof, requirements);
+  } catch (error) {
+    if (error && typeof error === "object" && ("errorReason" in error || "transaction" in error)) {
+      settled = error;
+    } else {
+      const errorData = error?.response?.data ?? error?.cause?.response?.data;
+      if (errorData && typeof errorData === "object" && ("transaction" in errorData || "errorReason" in errorData)) {
+        settled = errorData;
+      } else {
+        return {
+          ...failure("settlement_pending", auth.from, requirements.amount),
+          network: requirements.network
+        };
+      }
+    }
+  }
+  const txHash = settled.transaction && /^0x[0-9a-fA-F]{64}$/.test(settled.transaction) ? settled.transaction : void 0;
+  if (settled.success && txHash) {
+    return {
+      valid: true,
+      payer: auth.from,
+      amount: requirements.amount,
+      txHash,
+      settledAt: (/* @__PURE__ */ new Date()).toISOString(),
+      network: requirements.network
+    };
+  }
+  const reason = settled.errorReason || "";
+  const code = txHash && !settled.success || reason === "settlement_pending" ? "settlement_pending" : reason.includes("nonce_already_used") || reason.includes("already_used") ? "payment_replayed" : "settlement_failed";
+  return {
+    ...failure(code, auth.from, requirements.amount),
+    txHash,
+    network: requirements.network
+  };
+}
 async function verifyPaymentProof(input, resource) {
   const checked = validateProof(input, resource);
   if (!("proof" in checked)) return checked;
@@ -1073,6 +1155,15 @@ async function verifyPaymentProof(input, resource) {
   const existing = pendingFor(key);
   if (existing) return { ...failure("settlement_pending", proof.payload.authorization.from, resource.amount), txHash: existing.txHash };
   if (inFlight.has(key)) return failure("settlement_in_progress", proof.payload.authorization.from, resource.amount);
+  let target;
+  try {
+    target = getFacilitatorTarget();
+  } catch (error) {
+    return failure(error instanceof PaymentError ? error.code : "payment_configuration_error", proof.payload.authorization.from, resource.amount);
+  }
+  if (target.type === "http") {
+    return verifyWithHttpFacilitator(target.url, proof, requirements);
+  }
   try {
     return await verifyOnChain(createFacilitator(resource, proof), proof, requirements);
   } catch (error) {
@@ -1089,6 +1180,26 @@ async function settlePaymentProof(input, resource) {
   if (existing) return { ...failure("settlement_pending", auth.from, resource.amount), txHash: existing.txHash, network: requirements.network };
   if (inFlight.has(key)) return failure("settlement_in_progress", auth.from, resource.amount);
   inFlight.add(key);
+  let target;
+  try {
+    target = getFacilitatorTarget();
+  } catch (error) {
+    inFlight.delete(key);
+    return failure(error instanceof PaymentError ? error.code : "payment_configuration_error", auth.from, resource.amount);
+  }
+  if (target.type === "http") {
+    try {
+      const verified = await verifyWithHttpFacilitator(target.url, proof, requirements);
+      if (!verified.valid) return verified;
+      const settledResult = await settleWithHttpFacilitator(target.url, proof, requirements);
+      if (settledResult.errorCode === "settlement_pending" && settledResult.txHash) {
+        pending.set(key, { txHash: settledResult.txHash, expiresAt: Number(auth.validBefore) * 1e3 + 6e4 });
+      }
+      return settledResult;
+    } finally {
+      inFlight.delete(key);
+    }
+  }
   const attempt = {};
   let result;
   try {
@@ -1155,13 +1266,23 @@ async function dispatchResourceRequest(resourceId, params) {
   }
 }
 function getWellKnownManifest(origin) {
+  let facilitatorLabel = `Primer Systems public x402 facilitator (${PRIMER_FACILITATOR_URL})`;
+  try {
+    const target = getFacilitatorTarget();
+    if (target.type === "http") {
+      facilitatorLabel = target.url === PRIMER_FACILITATOR_URL ? `Primer Systems public x402 facilitator (${target.url})` : `x402 HTTP facilitator (${target.url})`;
+    } else {
+      facilitatorLabel = "Relay self-hosted @x402/evm facilitator";
+    }
+  } catch {
+  }
   return {
     x402Version: 2,
     name: "Relay",
     description: "Pay-per-use information retrieval with confirmed USDC payments using x402 v2 exact.",
     network: configuredNetwork === "base" ? "eip155:8453" : "eip155:84532",
     chainId: configuredNetwork === "base" ? base.id : baseSepolia.id,
-    facilitator: "Relay self-hosted @x402/evm facilitator",
+    facilitator: facilitatorLabel,
     resources: RELAY_RESOURCES2.map((resource) => ({
       ...requirementsFor(resource),
       url: resourceUrl(resource, origin),
