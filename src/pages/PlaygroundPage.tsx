@@ -11,7 +11,7 @@ import {
 import type { X402Challenge, X402PaymentProof, X402Resource } from '../types/x402';
 import { getGatewayUrl, relayChain, relayNetwork, relayNetworkLabel, relayTokenAddress, relayTreasuryAddress } from '../config/wagmi';
 import { FaPlay, FaCopy, FaCheck } from 'react-icons/fa6';
-import { AlertCircle, Wallet, ExternalLink, Receipt } from 'lucide-react';
+import { AlertCircle, Wallet, ExternalLink, Receipt, Search } from 'lucide-react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useReadContract, useSignTypedData, useSwitchChain } from 'wagmi';
 
@@ -169,6 +169,75 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
 
   useEffect(() => () => executionRef.current?.abort(), []);
 
+  useEffect(() => {
+    if (initialResourceId) {
+      const res = RELAY_RESOURCES.find(r => r.id === initialResourceId);
+      if (res) {
+        setSelectedResourceId(res.id);
+        const params = initialQuery && 'query' in res.defaultParams
+          ? { ...res.defaultParams, query: initialQuery }
+          : res.defaultParams;
+        setRequestBodyText(JSON.stringify(params, null, 2));
+      }
+    }
+  }, [initialResourceId, initialQuery]);
+
+  const primaryParamConfig = ((): { key: string; label: string; placeholder: string } | null => {
+    if ('query' in selectedResource.defaultParams) {
+      return {
+        key: 'query',
+        label: selectedResource.id === 'academic_search' ? 'Scholarly Search Query' : 'Search Query',
+        placeholder: selectedResource.id === 'academic_search'
+          ? 'e.g. quantum computing, CRISPR gene editing, zero-knowledge proofs'
+          : 'Enter search keywords...',
+      };
+    }
+    if ('doi' in selectedResource.defaultParams) {
+      return {
+        key: 'doi',
+        label: 'Digital Object Identifier (DOI)',
+        placeholder: 'e.g. 10.1038/s41586-020-2649-2',
+      };
+    }
+    if ('topic' in selectedResource.defaultParams) {
+      return {
+        key: 'topic',
+        label: 'Research Topic',
+        placeholder: 'e.g. artificial intelligence safety protocols',
+      };
+    }
+    if ('claim' in selectedResource.defaultParams) {
+      return {
+        key: 'claim',
+        label: 'Claim to Verify',
+        placeholder: 'e.g. atmospheric CO2 reached 420 ppm in 2023',
+      };
+    }
+    return null;
+  })();
+
+  const currentPrimaryValue = ((): string => {
+    if (!primaryParamConfig) return '';
+    try {
+      const parsed = JSON.parse(requestBodyText);
+      return typeof parsed[primaryParamConfig.key] === 'string' ? parsed[primaryParamConfig.key] : '';
+    } catch {
+      return '';
+    }
+  })();
+
+  const handlePrimaryChange = (val: string) => {
+    if (!primaryParamConfig) return;
+    clearExecution();
+    try {
+      const parsed = JSON.parse(requestBodyText);
+      parsed[primaryParamConfig.key] = val;
+      setRequestBodyText(JSON.stringify(parsed, null, 2));
+    } catch {
+      setRequestBodyText(JSON.stringify({ ...selectedResource.defaultParams, [primaryParamConfig.key]: val }, null, 2));
+    }
+  };
+
   const clearExecution = () => {
     setChallenge402(null);
     setActiveProof(null);
@@ -283,6 +352,26 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
                   <div className="font-mono text-xs text-neutral-200 break-all">POST {selectedResource.path}</div>
                   <p className="text-xs mt-2 leading-relaxed">{selectedResource.description}</p>
                 </div>
+                {primaryParamConfig && (
+                  <div className="mb-5 p-4 rounded-xl bg-neutral-950/80 border border-blue-500/30 shadow-sm">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <label htmlFor="playground-primary-input" className="text-xs font-mono uppercase tracking-wider text-blue-400 font-medium flex items-center gap-1.5">
+                        <Search className="size-3.5" />
+                        <span>{primaryParamConfig.label}</span>
+                      </label>
+                      <span className="text-[10px] font-mono text-neutral-500">Auto-syncs with JSON</span>
+                    </div>
+                    <input
+                      id="playground-primary-input"
+                      type="text"
+                      disabled={executing}
+                      value={currentPrimaryValue}
+                      onChange={e => handlePrimaryChange(e.target.value)}
+                      placeholder={primaryParamConfig.placeholder}
+                      className="w-full bg-neutral-900 font-mono text-xs text-neutral-100 border border-neutral-700/80 rounded-xl px-3.5 py-2.5 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-neutral-500"
+                    />
+                  </div>
+                )}
                 <div className="mb-6">
                   <div className="flex flex-wrap justify-between gap-2 mb-2"><label htmlFor="playground-request-body" className="text-xs font-mono uppercase tracking-wider">Request Body (JSON)</label><button type="button" disabled={executing} onClick={() => { clearExecution(); setRequestBodyText(JSON.stringify(selectedResource.defaultParams, null, 2)); }} className="text-[11px] font-mono hover:text-neutral-200">Reset Payload</button></div>
                   <textarea id="playground-request-body" rows={6} disabled={executing} value={requestBodyText} onChange={event => { clearExecution(); setRequestBodyText(event.target.value); }} spellCheck={false}
@@ -293,9 +382,25 @@ export const PlaygroundPage: React.FC<PlaygroundPageProps> = ({
                 {errorMsg && <div role="alert" className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 text-xs text-red-400"><AlertCircle className="size-4 shrink-0" /><span>{errorMsg}</span></div>}
                 {pendingPayment && <div role="status" className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 space-y-2"><p>Pending payment: no confirmed settlement receipt. Further payments from this wallet are paused for this session; reconcile the authorization before retrying.</p>{pendingPayment.txHash ? <a className="underline break-all" href={`${relayChain.blockExplorers.default.url}/tx/${pendingPayment.txHash}`} target="_blank" rel="noreferrer">Check transaction {pendingPayment.txHash}</a> : <p>No transaction hash was returned. Do not assume that no payment occurred.</p>}</div>}
                 {!isConnected ? <div className="w-full p-4 rounded-xl bg-neutral-950 border border-neutral-800 text-center space-y-3"><p className="text-xs">Connect a wallet to authorize execution</p><ConnectButton /></div> :
-                  <button type="button" disabled={executing || Boolean(pendingPayment)} onClick={handleExecute} className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-500 text-neutral-950 font-medium text-xs font-mono flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500">
-                    <FaPlay className="size-3" /><span>{executing ? 'Waiting for wallet / gateway confirmation...' : `Pay $${selectedResource.priceUsdc.toFixed(2)} USDC & Execute`}</span>
-                  </button>}
+                  <>
+                    <button type="button" disabled={executing || Boolean(pendingPayment)} onClick={handleExecute} className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-500 text-neutral-950 font-medium text-xs font-mono flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500">
+                      <FaPlay className="size-3" /><span>{executing ? 'Waiting for wallet / gateway confirmation...' : `Pay $${selectedResource.priceUsdc.toFixed(2)} USDC & Execute`}</span>
+                    </button>
+                    {executing && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          executionRef.current?.abort();
+                          executionRef.current = null;
+                          setExecuting(false);
+                          setErrorMsg('Request cancelled.');
+                        }}
+                        className="mt-2 w-full py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white font-mono text-xs border border-neutral-800 focus-visible:ring-2 focus-visible:ring-blue-500"
+                      >
+                        Cancel Request
+                      </button>
+                    )}
+                  </>}
               </div>
             </div>
 
