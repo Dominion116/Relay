@@ -1,6 +1,6 @@
 import React from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowUpRight01Icon, NewTwitterIcon } from '@hugeicons/core-free-icons';
+import { ArrowUpRight01Icon } from '@hugeicons/core-free-icons';
 import { motion, type Variants } from 'motion/react';
 
 const staggerContainer: Variants = {
@@ -159,29 +159,6 @@ export const Footer: React.FC<Footer20Props> = ({
                   >
                     <span>llms.txt (for AI agents)</span>
                     <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://docs.base.org"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors inline-flex items-center gap-1"
-                  >
-                    <span>Base docs</span>
-                    <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
-                  </a>
-                </li>
-                <li className="pt-1">
-                  <a
-                    href="https://x.com/base"
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Twitter / X"
-                    className="text-neutral-400 hover:text-neutral-100 transition-colors inline-flex items-center gap-1.5 text-xs"
-                  >
-                    <HugeiconsIcon icon={NewTwitterIcon} size={16} />
-                    <span>@base</span>
                   </a>
                 </li>
               </ul>
