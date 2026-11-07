@@ -112,6 +112,7 @@ export const DocsPage: React.FC<DocsPageProps> = ({ onNavigate, onOpenMcp, onOpe
     { title: 'Getting Started', items: [['quickstart', 'Quickstart'], ['concepts', 'Core concepts'], ['why-base', 'Base networks']] },
     { title: 'Protocol Handshake', items: [['handshake', 'The x402 handshake'], ['eip712', 'EIP-712 signing'], ['manifest', 'Machine manifest']] },
     { title: 'Agent Integration', items: [['ts-sdk', 'TypeScript and Viem'], ['python-sdk', 'Python discovery'], ['mcp-server', 'Cursor and Claude MCP']] },
+    { title: 'Network Economics', items: [['token-utility', '$RELAY Token Utility & Vibestarter']] },
     { title: 'Reference', items: [['endpoints', 'Endpoints and limits'], ['errors', 'Errors and recovery']] },
   ];
   const navigateSection = (id: string) => {
@@ -163,6 +164,46 @@ export const DocsPage: React.FC<DocsPageProps> = ({ onNavigate, onOpenMcp, onOpe
           <section id="python-sdk" className={sectionClass}><h2 className={headingClass}>Python discovery</h2><p>This example inspects the challenge only. Weather takes coordinates, not a place-name query; forward geocoding is a separate endpoint.</p><CodeBlock label="Python challenge inspection" code={`import base64, json, requests\n\nres = requests.post(\n    "http://localhost:5173/v1/weather",\n    json={"latitude": 52.52, "longitude": 13.405},\n    timeout=30, allow_redirects=False\n)\nif res.status_code == 402:\n    offer = json.loads(base64.b64decode(res.headers["PAYMENT-REQUIRED"]))\n    print(json.dumps(offer, indent=2))\nelse:\n    res.raise_for_status()\n# No wallet key or payment is used by this example.`} /></section>
 
           <section id="mcp-server" className={sectionClass}><h2 className={headingClass}>Cursor and Claude MCP</h2><p>Use npm run mcp in a terminal. Desktop configuration should launch Node directly with absolute checkout paths, as shown below, to keep the stdio channel free of npm startup banners. Replace the path, local key, and treasury placeholders.</p><CodeBlock label="Local desktop MCP configuration" code={MCP_LOCAL_CONFIG} /><p>BASE_NETWORK, GATEWAY_ORIGIN, RELAY_TREASURY_ADDRESS, MAX_PAYMENT_USDC, and MAX_DAILY_BUDGET_USDC are enforced. The default budget ledger is ~/.relay/mcp-budget.json, keyed by account, network, and UTC day. RELAY_BUDGET_FILE can choose an absolute location outside the repository. Do not delete the ledger or its lock to bypass an uncertain payment; reconcile first.</p><button type="button" onClick={onOpenMcp} className="text-xs font-mono text-neutral-200 underline underline-offset-4">Open MCP setup dialog</button></section>
+
+          <section id="token-utility" className={sectionClass}>
+            <h2 className={headingClass}>$RELAY Token Utility & Vibestarter Architecture</h2>
+            <p>
+              Relay is engineered for autonomous AI agents on Base. For the upcoming Vibestarter raise following Vibeathon 02, the $RELAY token has four distinct, high-demand utilities designed into the core protocol from Day 1:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs mt-4">
+              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
+                <span className="text-blue-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">1. In-Protocol Fuel & 50% Discount</span>
+                <h3 className="text-sm font-medium text-neutral-100">Direct x402 Payment Option</h3>
+                <p className="text-neutral-400 leading-relaxed">
+                  In canonical x402 v2, gateways accept multiple settlement assets. Agents paying with $RELAY receive an automatic 50% discount compared to native USDC, driving direct buy pressure from high-volume agent operators.
+                </p>
+              </div>
+              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
+                <span className="text-emerald-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">2. Agent Quota Staking</span>
+                <h3 className="text-sm font-medium text-neutral-100">Perpetual Daily Free Credits</h3>
+                <p className="text-neutral-400 leading-relaxed">
+                  Agent frameworks and developers can stake $RELAY once to unlock daily gasless query credits (Tier 1: 50 calls/day, Tier 2: 500 calls/day + rate limit priority), eliminating micro-transaction friction.
+                </p>
+              </div>
+              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
+                <span className="text-purple-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">3. Provider Marketplace Bonding</span>
+                <h3 className="text-sm font-medium text-neutral-100">Slashing & Quality Collateral</h3>
+                <p className="text-neutral-400 leading-relaxed">
+                  Third-party developers who want to list custom APIs on Relay and earn USDC from AI agents must stake $RELAY as a quality guarantee bond, creating protocol-level lockups.
+                </p>
+              </div>
+              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
+                <span className="text-amber-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">4. Programmatic Buyback & Burn</span>
+                <h3 className="text-sm font-medium text-neutral-100">Direct Protocol Revenue Accrual</h3>
+                <p className="text-neutral-400 leading-relaxed">
+                  A 20% protocol share of all USDC collected across gateway endpoints is programmatically routed to buy back and burn $RELAY on Base decentralized exchanges, directly linking API usage to token scarcity.
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-neutral-500 font-mono mt-2">
+              Note: Token launch and liquidity bootstrapping will occur exclusively via the Vibestarter platform post-hackathon.
+            </p>
+          </section>
 
           <section id="endpoints" className={sectionClass}><h2 className={headingClass}>Endpoints and limits</h2><p>Academic routes are /v1/academic/search and /v1/academic/work. FX uses baseCurrency and targets; crypto uses assets and vsCurrency. Use CoinGecko asset IDs, not exchange ticker symbols. Request JSON must be an object with only schema fields; request bodies are limited to 16 KiB and arrays to ten values.</p><p>News covers recent Hacker News submissions, not global reporting; submitted_at is not an article publication date. Geocoding is forward-only. Claim lookup returns INSUFFICIENT with retrieved evidence and null confidence, not an automated factual verdict. Research aggregates source material without certifying its truth.</p><button type="button" onClick={() => onNavigate('capabilities')} className="inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/60 text-neutral-300 px-4 py-2 text-xs font-medium">Browse schemas and exact prices <FaArrowRight className="size-2.5" /></button></section>
 

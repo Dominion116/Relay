@@ -295,6 +295,88 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           </section>
 
+          {/* Section: $RELAY Token Utility & Vibestarter Economics */}
+          <section aria-labelledby="token-heading">
+            <div className="max-w-2xl mb-12">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-xs font-mono text-blue-400 mb-4">
+                <span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span>Vibestarter Architecture</span>
+              </div>
+              <h2 id="token-heading" className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 text-balance">
+                The Day-1 Job of the $RELAY Token
+              </h2>
+              <p className="text-[15px] leading-relaxed text-neutral-400">
+                A token must have a real, indispensable job inside the app from day one. $RELAY powers query discounts, autonomous agent quota staking, and decentralized provider guarantees on Base.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Utility 1 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-blue-500/50 transition-colors">
+                <div>
+                  <div className="text-xs font-mono text-blue-400 font-semibold mb-2 uppercase tracking-wider">
+                    01 • In-Protocol Fuel
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">50% Query Discount</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Agents paying x402 challenges with $RELAY instead of USDC receive an automatic 50% discount, creating organic buy pressure directly tied to query volume.
+                  </p>
+                </div>
+                <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
+                  Dual x402 settlement asset
+                </div>
+              </div>
+
+              {/* Utility 2 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-emerald-500/50 transition-colors">
+                <div>
+                  <div className="text-xs font-mono text-emerald-400 font-semibold mb-2 uppercase tracking-wider">
+                    02 • Agent Staking
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">Perpetual Daily Quotas</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Developers and autonomous agent frameworks stake $RELAY to unlock permanent daily gasless query credits without per-request payment friction.
+                  </p>
+                </div>
+                <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
+                  Zero micro-billing overhead
+                </div>
+              </div>
+
+              {/* Utility 3 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-purple-500/50 transition-colors">
+                <div>
+                  <div className="text-xs font-mono text-purple-400 font-semibold mb-2 uppercase tracking-wider">
+                    03 • Marketplace Bond
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">Provider Collateral</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    Third-party developers who want to list custom API capabilities and monetize data on Relay stake $RELAY as quality guarantee slashing collateral.
+                  </p>
+                </div>
+                <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
+                  Decentralized API expansion
+                </div>
+              </div>
+
+              {/* Utility 4 */}
+              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-amber-500/50 transition-colors">
+                <div>
+                  <div className="text-xs font-mono text-amber-400 font-semibold mb-2 uppercase tracking-wider">
+                    04 • Protocol Accrual
+                  </div>
+                  <h3 className="text-base font-medium text-neutral-100 mb-2">USDC Buyback & Burn</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed font-sans">
+                    20% of all gateway USDC settlement fees collected by the treasury are programmatically routed to buy back and burn $RELAY on Base DEXs.
+                  </p>
+                </div>
+                <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
+                  Value linked to network activity
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* Section 3: Frequently Asked Questions */}
           <section aria-labelledby="faq-heading">
             <div className="max-w-2xl mb-12">

@@ -107,6 +107,16 @@ console.log(crypto.data);
 - **Facilitator:**
   - URL: `https://x402.primer.systems` (Public gasless settlement)
 
+## $RELAY Token Utility (Vibestarter Architecture)
+
+The upcoming $RELAY token powers four core utilities on Base from Day 1:
+1. **In-Protocol Fuel & 50% Query Discount:** Paying x402 challenges in $RELAY provides an automatic 50% discount compared to USDC, driving buy demand from high-volume agent operators.
+2. **Agent Quota Staking:** Agents and developers stake $RELAY to unlock perpetual daily gasless query credits without per-request micro-billing.
+3. **Provider Marketplace Bonding:** Third-party data developers stake $RELAY as quality collateral to list and monetize custom endpoints.
+4. **Protocol Buyback & Burn:** 20% of all gateway USDC fees are programmatically routed to buy back and burn $RELAY on Base DEXs.
+
+Note: Token launch and liquidity bootstrapping will occur via the Vibestarter platform post-hackathon.
+
 ## Documentation & Links
 
 - Full LLM Reference: `/llms-full.txt`
