@@ -1,5 +1,6 @@
 import type { PageRoute } from '../types/navigation';
 import React, { useState } from 'react';
+import { motion, type Variants } from 'motion/react';
 import { Hero9 } from '../components/Hero9';
 import { Check, ChevronDown, ArrowRight, Minus } from 'lucide-react';
 import { Footer } from '../components/Footer';
@@ -10,6 +11,45 @@ interface HomePageProps {
   onOpenDiscovery?: () => void;
   onSelectQueryForPlayground: (query: string) => void;
 }
+
+const sectionVariants: Variants = {
+  hidden: { opacity: 0, y: 28, filter: 'blur(4px)' },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      duration: 0.65,
+      bounce: 0,
+    },
+  },
+};
+
+const staggerContainer: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const cardItemVariants: Variants = {
+  hidden: { opacity: 0, y: 18, filter: 'blur(4px)' },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      duration: 0.55,
+      bounce: 0,
+    },
+  },
+};
 
 export const HomePage: React.FC<HomePageProps> = ({
   onNavigate,
@@ -86,7 +126,13 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="max-w-[1400px] w-full mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-28 flex flex-col gap-24">
           
           {/* Section 1: Autonomous Commerce Shift */}
-          <section aria-labelledby="shift-heading">
+          <motion.section
+            aria-labelledby="shift-heading"
+            variants={sectionVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.15 }}
+          >
             <div className="max-w-2xl mb-12">
               <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
                 <span className="size-1.5 rounded-full bg-blue-500" />
@@ -100,9 +146,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.15 }}
+              className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8"
+            >
               {/* Legacy Model */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 sm:p-8 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
                   <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-800/80">
                     <div>
@@ -120,7 +172,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Minus className="size-3 text-neutral-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-200">Human billing commitments:</strong> Requires credit card invoicing, monthly plan tiers, and manual spend ceilings.
+                        <strong className="font-medium text-neutral-100">Human credit card required:</strong> AI agents cannot pass KYC, enter CVV codes, or hold corporate credit cards.
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -128,7 +180,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Minus className="size-3 text-neutral-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-200">Static credential lock-in:</strong> Requires manual portal signups, account verification, and leaked API key liabilities.
+                        <strong className="font-medium text-neutral-100">Opaque monthly subscriptions:</strong> $20 to $500 monthly commitments regardless of whether the agent executes 1 query or 10,000 queries.
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -136,29 +188,30 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Minus className="size-3 text-neutral-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-200">Agent wallet incompatibility:</strong> Incapable of streaming payments directly from autonomous on-chain smart wallets.
+                        <strong className="font-medium text-neutral-100">Leaked static API keys:</strong> Long-lived secrets committed to code repositories or leaked during autonomous tool execution.
                       </div>
                     </li>
                   </ul>
                 </div>
 
                 <div className="mt-8 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-500">
-                  <span>Billing: Recurring subscriptions</span>
-                  <span>Provisioning: Manual</span>
+                  <span>Billing: Monthly recurrent</span>
+                  <span>Setup: Manual account KYC</span>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Relay on Base */}
-              <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800/80 p-6 sm:p-8 flex flex-col justify-between hover:border-neutral-700/80 transition-colors relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+              {/* Relay Model */}
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/40 border border-neutral-800/90 p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group hover:border-neutral-700/80 transition-colors">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
+                
                 <div>
                   <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-800/80">
                     <div>
-                      <span className="text-xs font-mono text-blue-400 block mb-1">rfc x402 on base</span>
+                      <span className="text-xs font-mono text-blue-400 block mb-1">x402 Protocol</span>
                       <h3 className="text-lg font-medium text-neutral-100">Relay on Base</h3>
                     </div>
-                    <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                      Base L2 standard
+                    <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      Machine-native
                     </span>
                   </div>
 
@@ -194,12 +247,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <span className="text-blue-400">Billing: Per request ($0.04 - $0.12)</span>
                   <span className="text-neutral-300">Setup: Zero accounts</span>
                 </div>
-              </div>
-            </div>
-          </section>
+              </motion.div>
+            </motion.div>
+          </motion.section>
 
           {/* Section 2: Execution Cycle */}
-          <section aria-labelledby="cycle-heading">
+          <motion.section
+            aria-labelledby="cycle-heading"
+            variants={sectionVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.15 }}
+          >
             <div className="max-w-2xl mb-12">
               <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
                 <span className="size-1.5 rounded-full bg-neutral-500" />
@@ -213,9 +272,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.15 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            >
               {/* Step 1 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
@@ -232,10 +297,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <span className="text-neutral-500 block mb-0.5">Wire invocation:</span>
                   <code className="text-neutral-200">POST /api/v1/academic/search</code>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Step 2 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
@@ -252,10 +317,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <span className="text-neutral-500 block mb-0.5">Response status:</span>
                   <code className="text-neutral-200">402 Payment Required</code>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Step 3 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30">
@@ -272,10 +337,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <span className="text-neutral-500 block mb-0.5">Header proof:</span>
                   <code className="text-blue-400 break-all">PAYMENT-SIGNATURE: base64(proof)</code>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Step 4 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-neutral-700/80 transition-colors">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700/60">
@@ -292,12 +357,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <span className="text-neutral-500 block mb-0.5">Fulfilled response:</span>
                   <code className="text-neutral-200">200 OK • Payload delivered</code>
                 </div>
-              </div>
-            </div>
-          </section>
+              </motion.div>
+            </motion.div>
+          </motion.section>
 
           {/* Section: $RELAY Token Utility & Vibestarter Economics */}
-          <section aria-labelledby="token-heading">
+          <motion.section
+            aria-labelledby="token-heading"
+            variants={sectionVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.15 }}
+          >
             <div className="max-w-2xl mb-12">
               <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-xs font-mono text-blue-400 mb-4">
                 <span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
@@ -311,9 +382,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.15 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            >
               {/* Utility 1 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-blue-500/50 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-blue-500/50 transition-colors">
                 <div>
                   <div className="text-xs font-mono text-blue-400 font-semibold mb-2 uppercase tracking-wider">
                     01 • In-Protocol Fuel
@@ -326,10 +403,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
                   Dual x402 settlement asset
                 </div>
-              </div>
+              </motion.div>
 
               {/* Utility 2 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-emerald-500/50 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-emerald-500/50 transition-colors">
                 <div>
                   <div className="text-xs font-mono text-emerald-400 font-semibold mb-2 uppercase tracking-wider">
                     02 • Agent Staking
@@ -342,10 +419,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
                   Zero micro-billing overhead
                 </div>
-              </div>
+              </motion.div>
 
               {/* Utility 3 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-purple-500/50 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-purple-500/50 transition-colors">
                 <div>
                   <div className="text-xs font-mono text-purple-400 font-semibold mb-2 uppercase tracking-wider">
                     03 • Marketplace Bond
@@ -358,10 +435,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
                   Decentralized API expansion
                 </div>
-              </div>
+              </motion.div>
 
               {/* Utility 4 */}
-              <div className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-amber-500/50 transition-colors">
+              <motion.div variants={cardItemVariants} className="rounded-2xl bg-neutral-900/30 border border-neutral-800/80 p-6 flex flex-col justify-between hover:border-amber-500/50 transition-colors">
                 <div>
                   <div className="text-xs font-mono text-amber-400 font-semibold mb-2 uppercase tracking-wider">
                     04 • Protocol Accrual
@@ -374,12 +451,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="mt-5 pt-3 border-t border-neutral-800 text-[11px] font-mono text-neutral-300">
                   Value linked to network activity
                 </div>
-              </div>
-            </div>
-          </section>
+              </motion.div>
+            </motion.div>
+          </motion.section>
 
           {/* Section 3: Frequently Asked Questions */}
-          <section aria-labelledby="faq-heading">
+          <motion.section
+            aria-labelledby="faq-heading"
+            variants={sectionVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.15 }}
+          >
             <div className="max-w-2xl mb-12">
               <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 mb-4">
                 <span className="size-1.5 rounded-full bg-neutral-500" />
@@ -442,41 +525,55 @@ export const HomePage: React.FC<HomePageProps> = ({
                 );
               })}
             </div>
-          </section>
+          </motion.section>
 
-          {/* Section 4: Call to Action Banner (Unified Dark Theme) */}
-          <section aria-labelledby="cta-heading">
-            <div className="relative isolate overflow-hidden rounded-3xl bg-neutral-900/60 border border-neutral-800 p-8 sm:p-12 lg:p-16 text-center flex flex-col items-center justify-center">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+          {/* Section 4: Call to Action Banner (Hero Background Theme) */}
+          <motion.section
+            aria-labelledby="cta-heading"
+            variants={sectionVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="relative isolate overflow-hidden rounded-3xl bg-sky-300 p-8 sm:p-12 lg:p-16 text-center flex flex-col items-center justify-center text-slate-950 shadow-2xl">
+              <img
+                src="https://assets.watermelon.sh/hero-9-bg.avif"
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover object-center pointer-events-none select-none opacity-90"
+                aria-hidden="true"
+              />
 
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800/80 border border-neutral-700/60 text-xs font-mono text-neutral-300 mb-4">
-                <span className="size-1.5 rounded-full bg-blue-500" />
-                <span>Interactive testbench</span>
-              </div>
+              <div className="relative z-10 flex flex-col items-center justify-center max-w-2xl mx-auto">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-950/10 backdrop-blur-md border border-slate-950/15 text-xs font-mono text-slate-900 mb-5 shadow-xs">
+                  <span className="size-2 rounded-full bg-blue-600 animate-pulse" />
+                  <span className="font-semibold tracking-wide">Interactive testbench</span>
+                </div>
 
-              <h3 id="cta-heading" className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-neutral-100 mb-4 max-w-2xl text-balance">
-                Ready to test live x402 capability calls?
-              </h3>
-              <p className="text-[15px] sm:text-base text-neutral-400 max-w-xl mx-auto mb-8 leading-relaxed">
-                Execute live requests against CoinGecko, OpenAlex, Open-Meteo, and Wikidata in the interactive playground testbench.
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <button
-                  onClick={() => onNavigate('playground')}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white text-neutral-950 px-6 text-sm font-medium hover:bg-neutral-200 transition-colors shadow-sm active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                >
-                  <span>Open interactive playground</span>
-                  <ArrowRight className="size-3.5" />
-                </button>
-                <button
-                  onClick={() => onNavigate('capabilities')}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/80 text-neutral-200 px-6 text-sm font-medium hover:bg-neutral-800 hover:border-neutral-700 transition-colors shadow-sm active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                >
-                  <span>Browse 12 capabilities</span>
-                </button>
+                <h3 id="cta-heading" className="text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight text-slate-950 mb-4 max-w-xl text-balance">
+                  Ready to test live x402 capability calls?
+                </h3>
+                <p className="text-[15px] sm:text-base text-slate-800 max-w-xl mx-auto mb-8 leading-relaxed font-normal">
+                  Execute live requests against CoinGecko, OpenAlex, Open-Meteo, and Wikidata in the interactive playground testbench.
+                </p>
+                
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() => onNavigate('playground')}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-950 text-white px-6 text-sm font-medium hover:bg-slate-800 transition-[background-color,transform] active:scale-[0.98] shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950"
+                  >
+                    <span>Open interactive playground</span>
+                    <ArrowRight className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onNavigate('capabilities')}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-950/20 bg-white/80 backdrop-blur-md text-slate-950 px-6 text-sm font-medium hover:bg-white transition-[background-color,transform] active:scale-[0.98] shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950"
+                  >
+                    <span>Browse 12 capabilities</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </section>
+          </motion.section>
 
         </div>
       </main>
