@@ -349,3 +349,36 @@ export async function queryRelay(path: string, body: Record<string, unknown>) {
   return paidResponse.json();
 }
 ```
+
+---
+
+## 6. $RELAY Token Utility & Network Economics (Vibestarter Architecture)
+
+Relay introduces a dual-asset economic model for the upcoming Vibestarter raise following Vibeathon 02. USDC serves as the universal on-ramp for zero-friction x402 settlement, while $RELAY powers coordination capital and network value accrual.
+
+### The Four Day-1 Token Utilities
+1. **In-Protocol Fuel & 50% Query Discount:** Canonical x402 v2 gateways return multi-asset options in the `accepts` header. AI agents settling queries with $RELAY receive an automatic 50% discount compared to USDC ($0.04 USDC vs. $0.02 in $RELAY), creating structural buy pressure from high-volume agent operators.
+2. **Tiered Agent Quota Staking:** Agents and developers stake $RELAY non-custodially to unlock daily gasless query credits refreshed every 24h UTC, removing per-call signature overhead while retaining principal (7-day unbonding period).
+3. **Provider Marketplace Bonding & Slashing:** Third-party API operators bond 5,000 $RELAY as quality collateral. Slashed funds (>2% downtime or latency >1.5s) are distributed 50% as USDC compensation to callers and 50% burned.
+4. **Programmatic Buyback & Burn:** 20% of all gateway USDC fees are automatically routed into weekly DEX buybacks on Base and permanently burned to `0x000000000000000000000000000000000000dEaD`.
+
+### Quota Staking Tiers
+- **Tier 0 (PAYG):** 0 $RELAY | 0 daily free calls (per-call x402) | 30 req/min | Standard queue
+- **Tier 1 (Micro):** 2,500 $RELAY | 100 free calls/day | 60 req/min | Standard queue
+- **Tier 2 (Swarm):** 25,000 $RELAY | 1,500 free calls/day | 180 req/min | Priority lane
+- **Tier 3 (Enterprise):** 100,000 $RELAY | 10,000 free calls/day | 600 req/min | Dedicated routing
+
+### Protocol Fee Distribution
+- **70%:** Upstream API Data Providers & Node Infra (settled in USDC).
+- **10%:** Protocol Treasury (security audits, continuous integrations, Base sequencer gas subsidies).
+- **20%:** Programmatic Buyback & Burn on Base DEXs.
+
+### Token Supply & Allocations (100,000,000 Total Supply, Non-Inflationary)
+- **40%:** Vibestarter Public Raise & Base DEX Liquidity Pool (LP paired & locked).
+- **25%:** Agent Quota Staking Pool & Ecosystem Grants (36-month linear distribution).
+- **15%:** Core Engineering & Security Audits (12-month cliff, 24-month linear vesting).
+- **10%:** Provider Bonding Incentives & Insurance Pool.
+- **10%:** Protocol Treasury Reserve & Sequencer Gas Pool.
+
+> Note: Token launch and liquidity bootstrapping will occur via the Vibestarter platform post-hackathon.
+
