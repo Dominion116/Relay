@@ -166,43 +166,237 @@ export const DocsPage: React.FC<DocsPageProps> = ({ onNavigate, onOpenMcp, onOpe
           <section id="mcp-server" className={sectionClass}><h2 className={headingClass}>Cursor and Claude MCP</h2><p>Use npm run mcp in a terminal. Desktop configuration should launch Node directly with absolute checkout paths, as shown below, to keep the stdio channel free of npm startup banners. Replace the path, local key, and treasury placeholders.</p><CodeBlock label="Local desktop MCP configuration" code={MCP_LOCAL_CONFIG} /><p>BASE_NETWORK, GATEWAY_ORIGIN, RELAY_TREASURY_ADDRESS, MAX_PAYMENT_USDC, and MAX_DAILY_BUDGET_USDC are enforced. The default budget ledger is ~/.relay/mcp-budget.json, keyed by account, network, and UTC day. RELAY_BUDGET_FILE can choose an absolute location outside the repository. Do not delete the ledger or its lock to bypass an uncertain payment; reconcile first.</p><button type="button" onClick={onOpenMcp} className="text-xs font-mono text-neutral-200 underline underline-offset-4">Open MCP setup dialog</button></section>
 
           <section id="token-utility" className={sectionClass}>
-            <h2 className={headingClass}>$RELAY Token Utility & Vibestarter Architecture</h2>
-            <p>
-              Relay is engineered for autonomous AI agents on Base. For the upcoming Vibestarter raise following Vibeathon 02, the $RELAY token has four distinct, high-demand utilities designed into the core protocol from Day 1:
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <h2 className={headingClass}>Network Economics & $RELAY Token Utility</h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono text-[11px] font-semibold">
+                Vibestarter Architecture
+              </span>
+            </div>
+            
+            <p className="text-sm leading-relaxed text-neutral-300">
+              Relay solves the fundamental barrier preventing autonomous software from purchasing internet resources: <strong className="text-neutral-100">AI agents cannot own credit cards, pass KYC checks, or commit to monthly recurring SaaS subscriptions</strong>. By combining Base's sub-cent settlement with the canonical x402 v2 protocol, Relay establishes a machine-native micropayments layer.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs mt-4">
-              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
-                <span className="text-blue-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">1. In-Protocol Fuel & 50% Discount</span>
-                <h3 className="text-sm font-medium text-neutral-100">Direct x402 Payment Option</h3>
+            <p className="text-sm leading-relaxed text-neutral-400">
+              For the upcoming <strong className="text-neutral-200">Vibestarter raise following Vibeathon 02</strong>, Relay implements a dual-asset architecture. <strong className="text-neutral-200">USDC</strong> serves as the zero-friction settlement reserve for external agent frameworks, while the native <strong className="text-blue-400">$RELAY</strong> token functions as in-protocol fuel, coordination capital, and the primary vehicle for network value accrual.
+            </p>
+
+            <div className="my-6 border-t border-neutral-800/80" />
+
+            <h3 className="text-base font-medium text-neutral-100 mb-3">The Four Day-1 Jobs of the $RELAY Token</h3>
+            <p className="text-xs text-neutral-400 mb-4">
+              Unlike speculative tokens with post-raise utility, every mechanism below is architected directly into the Relay gateway and smart contract specification for Day 1:
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Job 1 */}
+              <div className="rounded-xl bg-neutral-900/50 border border-blue-500/20 p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-blue-400 font-mono text-[11px] font-semibold uppercase tracking-wider">1. Protocol Fuel</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">50% Discount</span>
+                </div>
+                <h4 className="text-sm font-medium text-neutral-100">Multi-Asset x402 Dynamic Settlement</h4>
                 <p className="text-neutral-400 leading-relaxed">
-                  In canonical x402 v2, gateways accept multiple settlement assets. Agents paying with $RELAY receive an automatic 50% discount compared to native USDC, driving direct buy pressure from high-volume agent operators.
+                  Canonical x402 v2 allows gateways to challenge requests with multiple valid payment assets via the <code className="text-neutral-300">accepts</code> header. Agents settling queries with $RELAY receive an automatic <strong>50% discount</strong> against the USDC base rate (e.g., $0.04 USDC vs. $0.02 equivalent in $RELAY).
                 </p>
+                <div className="p-3 rounded-lg bg-neutral-950/80 border border-neutral-800 font-mono text-[11px] text-neutral-300">
+                  <span className="text-neutral-500"># Economic Driver:</span> Autonomous swarms (Eliza, AutoGPT, Claude MCP) operating with fixed capital are economically compelled to buy and hold $RELAY to double their query runway.
+                </div>
               </div>
-              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
-                <span className="text-emerald-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">2. Agent Quota Staking</span>
-                <h3 className="text-sm font-medium text-neutral-100">Perpetual Daily Free Credits</h3>
+
+              {/* Job 2 */}
+              <div className="rounded-xl bg-neutral-900/50 border border-emerald-500/20 p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-400 font-mono text-[11px] font-semibold uppercase tracking-wider">2. Quota Staking</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">Gasless Quotas</span>
+                </div>
+                <h4 className="text-sm font-medium text-neutral-100">Tiered Agent Swarm Staking</h4>
                 <p className="text-neutral-400 leading-relaxed">
-                  Agent frameworks and developers can stake $RELAY once to unlock daily gasless query credits (Tier 1: 50 calls/day, Tier 2: 500 calls/day + rate limit priority), eliminating micro-transaction friction.
+                  High-frequency agents can eliminate per-call authorization friction altogether. By staking $RELAY into the non-custodial staking contract, agent operators unlock perpetual daily gasless query credits that refresh every 24 hours UTC.
                 </p>
+                <div className="p-3 rounded-lg bg-neutral-950/80 border border-neutral-800 font-mono text-[11px] text-neutral-300">
+                  <span className="text-neutral-500"># Capital Retention:</span> Tokens remain the property of the agent operator. Unstaking unlocks after an epoch cool-down (7 days), transforming API burn into capital retention.
+                </div>
               </div>
-              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
-                <span className="text-purple-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">3. Provider Marketplace Bonding</span>
-                <h3 className="text-sm font-medium text-neutral-100">Slashing & Quality Collateral</h3>
+
+              {/* Job 3 */}
+              <div className="rounded-xl bg-neutral-900/50 border border-purple-500/20 p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-purple-400 font-mono text-[11px] font-semibold uppercase tracking-wider">3. Provider Collateral</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30">Quality Bonding</span>
+                </div>
+                <h4 className="text-sm font-medium text-neutral-100">Marketplace Bonding & Slashing</h4>
                 <p className="text-neutral-400 leading-relaxed">
-                  Third-party developers who want to list custom APIs on Relay and earn USDC from AI agents must stake $RELAY as a quality guarantee bond, creating protocol-level lockups.
+                  Third-party developers who register proprietary endpoints on Relay's open marketplace must bond $RELAY as quality collateral. If an upstream provider violates SLAs (&gt;2% downtime, latency &gt;1.5s, or invalid response formats), their bond is slashed.
                 </p>
+                <div className="p-3 rounded-lg bg-neutral-950/80 border border-neutral-800 font-mono text-[11px] text-neutral-300">
+                  <span className="text-neutral-500"># Slashing Distribution:</span> Slashed collateral is distributed 50% to affected caller agents as USDC compensation and 50% permanently burned.
+                </div>
               </div>
-              <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-5 space-y-2">
-                <span className="text-amber-400 font-mono text-[11px] font-semibold uppercase tracking-wider block">4. Programmatic Buyback & Burn</span>
-                <h3 className="text-sm font-medium text-neutral-100">Direct Protocol Revenue Accrual</h3>
+
+              {/* Job 4 */}
+              <div className="rounded-xl bg-neutral-900/50 border border-amber-500/20 p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-400 font-mono text-[11px] font-semibold uppercase tracking-wider">4. Value Accrual</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">Deflationary</span>
+                </div>
+                <h4 className="text-sm font-medium text-neutral-100">Programmatic Protocol Buyback & Burn</h4>
                 <p className="text-neutral-400 leading-relaxed">
-                  A 20% protocol share of all USDC collected across gateway endpoints is programmatically routed to buy back and burn $RELAY on Base decentralized exchanges, directly linking API usage to token scarcity.
+                  20% of every USDC fee collected by the Relay gateway is programmatically routed into the autonomous on-chain buyback-and-burn contract, executing weekly DEX swaps on Base and sending purchased $RELAY to the dead address (<code className="text-neutral-300">0x...dead</code>).
                 </p>
+                <div className="p-3 rounded-lg bg-neutral-950/80 border border-neutral-800 font-mono text-[11px] text-neutral-300">
+                  <span className="text-neutral-500"># Flywheel Effect:</span> As query volume grows across search, crypto, and research endpoints, circulating token supply permanently contracts.
+                </div>
               </div>
             </div>
-            <p className="text-xs text-neutral-500 font-mono mt-2">
-              Note: Token launch and liquidity bootstrapping will occur exclusively via the Vibestarter platform post-hackathon.
-            </p>
+
+            {/* Staking Tiers Table */}
+            <div className="mt-8 space-y-3">
+              <h3 className="text-sm font-medium text-neutral-100">Agent Quota Staking Specification</h3>
+              <p className="text-xs text-neutral-400">
+                Agent operators choose between pay-as-you-go micro-settlement or locking $RELAY for perpetual gasless query credits:
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-950/60">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-neutral-900/60 text-neutral-400 border-b border-neutral-800">
+                    <tr>
+                      <th className="py-2.5 px-4">Tier Level</th>
+                      <th className="py-2.5 px-4">Target Audience</th>
+                      <th className="py-2.5 px-4">Staked $RELAY</th>
+                      <th className="py-2.5 px-4">Daily Free Calls</th>
+                      <th className="py-2.5 px-4">Rate Limits</th>
+                      <th className="py-2.5 px-4">Routing Queue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-800/60 text-neutral-300">
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-neutral-200">Tier 0 (PAYG)</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Casual explorers, single scripts</td>
+                      <td className="py-2.5 px-4 text-neutral-400">0 $RELAY</td>
+                      <td className="py-2.5 px-4 text-neutral-400">0 (per-call x402)</td>
+                      <td className="py-2.5 px-4">30 req / min</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Standard</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-blue-400">Tier 1 (Micro)</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Single autonomous bots, Cursor MCP</td>
+                      <td className="py-2.5 px-4 text-blue-300">2,500 $RELAY</td>
+                      <td className="py-2.5 px-4 text-emerald-400">100 calls / day</td>
+                      <td className="py-2.5 px-4">60 req / min</td>
+                      <td className="py-2.5 px-4 text-neutral-300">Standard</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-emerald-400">Tier 2 (Swarm)</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Multi-agent swarms, Eliza frameworks</td>
+                      <td className="py-2.5 px-4 text-emerald-300">25,000 $RELAY</td>
+                      <td className="py-2.5 px-4 text-emerald-400">1,500 calls / day</td>
+                      <td className="py-2.5 px-4">180 req / min</td>
+                      <td className="py-2.5 px-4 text-emerald-400">Priority Lane</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-purple-400">Tier 3 (Enterprise)</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Production agent orgs, DAOs</td>
+                      <td className="py-2.5 px-4 text-purple-300">100,000 $RELAY</td>
+                      <td className="py-2.5 px-4 text-emerald-400">10,000 calls / day</td>
+                      <td className="py-2.5 px-4">600 req / min</td>
+                      <td className="py-2.5 px-4 text-purple-400">Dedicated Routing</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Protocol Fee Distribution */}
+            <div className="mt-8 space-y-3">
+              <h3 className="text-sm font-medium text-neutral-100">Gateway Revenue & Fee Distribution</h3>
+              <p className="text-xs text-neutral-400">
+                Every settled transaction splits gross USDC fees across three deterministic protocol destinations:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-4">
+                  <div className="text-2xl font-bold text-neutral-100 mb-1">70%</div>
+                  <div className="text-neutral-200 font-medium mb-1">Provider Settlement</div>
+                  <div className="text-[11px] text-neutral-400 font-sans leading-relaxed">
+                    Instantly distributed in USDC to upstream data providers and API operators upon receipt generation.
+                  </div>
+                </div>
+                <div className="rounded-xl bg-neutral-900/40 border border-neutral-800 p-4">
+                  <div className="text-2xl font-bold text-blue-400 mb-1">10%</div>
+                  <div className="text-neutral-200 font-medium mb-1">Protocol Treasury</div>
+                  <div className="text-[11px] text-neutral-400 font-sans leading-relaxed">
+                    Funds smart contract security audits, continuous endpoint integrations, and Base sequencer gas subsidies.
+                  </div>
+                </div>
+                <div className="rounded-xl bg-neutral-900/40 border border-amber-500/30 p-4 bg-amber-500/5">
+                  <div className="text-2xl font-bold text-amber-400 mb-1">20%</div>
+                  <div className="text-amber-200 font-medium mb-1">Buyback & Burn</div>
+                  <div className="text-[11px] text-neutral-400 font-sans leading-relaxed">
+                    Programmatically swaps accumulated USDC for $RELAY on Base DEXs and burns it permanently.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Token Supply & Vibestarter Distribution */}
+            <div className="mt-8 space-y-3">
+              <h3 className="text-sm font-medium text-neutral-100">Token Distribution & Vibestarter Raise</h3>
+              <p className="text-xs text-neutral-400">
+                $RELAY has a strictly capped total supply of <strong className="text-neutral-200">100,000,000 tokens</strong> with no inflationary minting function:
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-950/60">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-neutral-900/60 text-neutral-400 border-b border-neutral-800">
+                    <tr>
+                      <th className="py-2.5 px-4">Allocation</th>
+                      <th className="py-2.5 px-4">Percentage</th>
+                      <th className="py-2.5 px-4">Tokens</th>
+                      <th className="py-2.5 px-4">Vesting & Release Terms</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-800/60 text-neutral-300">
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-blue-400">Vibestarter Public Raise & LP</td>
+                      <td className="py-2.5 px-4">40.0%</td>
+                      <td className="py-2.5 px-4">40,000,000</td>
+                      <td className="py-2.5 px-4 text-neutral-400">100% unlocked at launch; paired with raise proceeds and locked in Base DEX LP</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-emerald-400">Agent Quota Staking Pool</td>
+                      <td className="py-2.5 px-4">25.0%</td>
+                      <td className="py-2.5 px-4">25,000,000</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Distributed to active agent operators and ecosystem developers over 36 months</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-neutral-200">Core Engineering & Audits</td>
+                      <td className="py-2.5 px-4">15.0%</td>
+                      <td className="py-2.5 px-4">15,000,000</td>
+                      <td className="py-2.5 px-4 text-neutral-400">12-month cliff followed by 24-month linear block-by-block vesting</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-purple-400">Provider Bonding Incentives</td>
+                      <td className="py-2.5 px-4">10.0%</td>
+                      <td className="py-2.5 px-4">10,000,000</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Subsidizes early data providers onboarding novel APIs to the gateway</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-4 font-semibold text-neutral-400">Protocol Treasury Reserve</td>
+                      <td className="py-2.5 px-4">10.0%</td>
+                      <td className="py-2.5 px-4">10,000,000</td>
+                      <td className="py-2.5 px-4 text-neutral-400">Governed by multisig for sequencer gas subsidies and emergency contingencies</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mt-6 p-4 rounded-xl bg-neutral-900/30 border border-neutral-800 text-xs text-neutral-400 space-y-1.5">
+              <div className="text-neutral-200 font-medium flex items-center gap-2">
+                <span className="size-2 rounded-full bg-blue-500" />
+                <span>Note for Hackathon Evaluators and Vibestarter Backers</span>
+              </div>
+              <p className="leading-relaxed">
+                In strict compliance with Vibeathon 02 and Vibestarter guidelines, the $RELAY token is <strong>not launched prior to the Vibestarter campaign</strong>. Instead, the working codebase submitted for Monday's deadline proves the product's live utility, showing backers exactly how organic demand is generated by real AI agent transactions from Day 1.
+              </p>
+            </div>
           </section>
 
           <section id="endpoints" className={sectionClass}><h2 className={headingClass}>Endpoints and limits</h2><p>Academic routes are /v1/academic/search and /v1/academic/work. FX uses baseCurrency and targets; crypto uses assets and vsCurrency. Use CoinGecko asset IDs, not exchange ticker symbols. Request JSON must be an object with only schema fields; request bodies are limited to 16 KiB and arrays to ten values.</p><p>News covers recent Hacker News submissions, not global reporting; submitted_at is not an article publication date. Geocoding is forward-only. Claim lookup returns INSUFFICIENT with retrieved evidence and null confidence, not an automated factual verdict. Research aggregates source material without certifying its truth.</p><button type="button" onClick={() => onNavigate('capabilities')} className="inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/60 text-neutral-300 px-4 py-2 text-xs font-medium">Browse schemas and exact prices <FaArrowRight className="size-2.5" /></button></section>
