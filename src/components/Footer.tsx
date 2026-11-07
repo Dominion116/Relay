@@ -2,6 +2,7 @@ import React from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowUpRight01Icon } from '@hugeicons/core-free-icons';
 import { motion, type Variants } from 'motion/react';
+import type { PageRoute } from '../types/navigation';
 
 const staggerContainer: Variants = {
   hidden: { opacity: 0 },
@@ -38,7 +39,7 @@ export interface Footer20Props {
   brandName?: string;
   description?: string;
   email?: string;
-  onNavigate?: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  onNavigate?: (page: PageRoute) => void;
   onOpenMcp?: () => void;
   onOpenDiscovery?: () => void;
 }
@@ -132,7 +133,7 @@ export const Footer: React.FC<Footer20Props> = ({
 
             {/* Developers */}
             <motion.div variants={riseItem} className="flex flex-col gap-4">
-              <h4 className="font-medium text-neutral-100 text-[14px] tracking-wide">Developers</h4>
+              <h4 className="font-medium text-neutral-100 text-[14px] tracking-wide">Developers & Legal</h4>
               <ul className="flex flex-col gap-2.5">
                 <li>
                   <button
@@ -160,6 +161,33 @@ export const Footer: React.FC<Footer20Props> = ({
                     <span>llms.txt (for AI agents)</span>
                     <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
                   </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/Dominion116/Relay/issues"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors inline-flex items-center gap-1"
+                  >
+                    <span>Developer support</span>
+                    <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
+                  </a>
+                </li>
+                <li>
+                  <button
+                    onClick={() => onNavigate?.('terms')}
+                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors text-left"
+                  >
+                    Terms of service
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => onNavigate?.('privacy')}
+                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors text-left"
+                  >
+                    Privacy policy
+                  </button>
                 </li>
               </ul>
             </motion.div>

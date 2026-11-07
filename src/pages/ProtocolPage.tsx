@@ -1,3 +1,4 @@
+import type { PageRoute } from '../types/navigation';
 import React, { useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
@@ -8,7 +9,7 @@ import { paymentNetwork } from '../shared/paymentClient';
 import { getGatewayUrl, relayNetwork, relayTreasuryAddress } from '../config/wagmi';
 
 interface ProtocolPageProps {
-  onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  onNavigate: (page: PageRoute) => void;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
 }

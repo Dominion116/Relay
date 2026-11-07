@@ -1,3 +1,4 @@
+import type { PageRoute } from '../types/navigation';
 import React, { useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
@@ -8,7 +9,7 @@ import { FaArrowRight, FaMagnifyingGlass } from 'react-icons/fa6';
 import { BookOpen, TrendingUp, CloudSun, MapPin, Calendar, CheckCircle2, Globe, Layers } from 'lucide-react';
 
 interface CapabilitiesPageProps {
-  onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  onNavigate: (page: PageRoute) => void;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
   onSelectResourceForPlayground: (id: string) => void;

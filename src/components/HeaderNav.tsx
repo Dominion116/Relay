@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { FaArrowRight, FaXmark } from 'react-icons/fa6';
 import { relayChain, relayNetworkLabel } from '../config/wagmi';
+import type { PageRoute } from '../types/navigation';
 
 export interface HeaderNavProps {
-  currentPage: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs';
-  onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  currentPage: PageRoute;
+  onNavigate: (page: PageRoute) => void;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
 }

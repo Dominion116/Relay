@@ -1,3 +1,4 @@
+import type { PageRoute } from '../types/navigation';
 import React, { useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
@@ -6,7 +7,7 @@ import { FaCopy, FaCheck, FaArrowRight } from 'react-icons/fa6';
 import { BookOpen, ChevronDown } from 'lucide-react';
 
 interface DocsPageProps {
-  onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  onNavigate: (page: PageRoute) => void;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
 }

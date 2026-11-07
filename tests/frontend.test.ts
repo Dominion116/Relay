@@ -254,7 +254,7 @@ test('payment controls are labeled, output tabs are linked, and footer actions a
 
 test('homepage queries use a real academic search catalog entry', () => {
   const hooks = new Hooks();
-  const routes = Object.fromEntries(['HomePage', 'CapabilitiesPage', 'PlaygroundPage', 'ProtocolPage', 'DocsPage'].map(name => [`./pages/${name}`, { [name]: name }]));
+  const routes = Object.fromEntries(['HomePage', 'CapabilitiesPage', 'PlaygroundPage', 'ProtocolPage', 'DocsPage', 'TermsPage', 'PrivacyPage', 'NotFoundPage'].map(name => [`./pages/${name}`, { [name]: name }]));
   const app = load('App.tsx', { react: hooks.react, ...routes, './components/McpIntegrationModal': { McpIntegrationModal: 'Mcp' }, './components/DiscoveryModal': { DiscoveryModal: 'Discovery' } });
   const initial = hooks.render(app.App, {});
   nodes(initial).find(node => node.type === 'HomePage').props.onSelectQueryForPlayground('quantum computing');

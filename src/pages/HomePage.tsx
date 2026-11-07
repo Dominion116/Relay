@@ -1,10 +1,11 @@
+import type { PageRoute } from '../types/navigation';
 import React, { useState } from 'react';
 import { Hero9 } from '../components/Hero9';
 import { Check, ChevronDown, ArrowRight, Minus } from 'lucide-react';
 import { Footer } from '../components/Footer';
 
 interface HomePageProps {
-  onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  onNavigate: (page: PageRoute) => void;
   onOpenMcp: () => void;
   onOpenDiscovery?: () => void;
   onSelectQueryForPlayground: (query: string) => void;

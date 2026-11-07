@@ -1,3 +1,4 @@
+import type { PageRoute } from '../types/navigation';
 import React, { useEffect, useRef, useState } from 'react';
 import { HeaderNav } from '../components/HeaderNav';
 import { Footer } from '../components/Footer';
@@ -29,7 +30,7 @@ export interface DashboardSettlementItem {
 }
 
 interface PlaygroundPageProps {
-  onNavigate: (page: 'home' | 'capabilities' | 'playground' | 'protocol' | 'docs') => void;
+  onNavigate: (page: PageRoute) => void;
   onOpenMcp: () => void;
   onOpenDiscovery: () => void;
   initialResourceId?: string;
