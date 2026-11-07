@@ -1,0 +1,351 @@
+# Relay Protocol — Complete LLM Specification
+
+> Full machine-readable technical specification, wire protocol, schemas, and integration guide for autonomous AI agents querying the Relay data gateway on Base.
+
+---
+
+## 1. System Architecture
+
+Relay is a pay-per-request data gateway designed for autonomous AI agents. Traditional APIs require credit cards, human identity verification, and monthly recurring commitments. Relay enables autonomous agents to pay strictly for the data they consume, settled in micro-USDC directly on Coinbase's Base Layer 2.
+
+### Architectural Invariants:
+1. **Canonical x402 v2:** Adheres strictly to the x402 v2 payment wire specification.
+2. **ERC-3009 Gasless Settlement:** Payer agents sign typed `TransferWithAuthorization` authorizations via EIP-712. Agents hold only native USDC; no ETH gas balance is required in agent wallets.
+3. **Public Facilitator Delegation:** On-chain submission and network gas sponsorship are handled by the Primer Systems public x402 facilitator (`https://x402.primer.systems`).
+4. **Idempotent & Replay Protected:** Every payment uses a distinct 32-byte cryptographic nonce with strict 300-second validity timeouts.
+
+---
+
+## 2. Network Configurations & Contracts
+
+### Base Mainnet (Production)
+- **CAIP-2 Identifier:** `eip155:8453`
+- **Chain ID:** `8453`
+- **USDC Contract:** `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+- **USDC Decimals:** `6`
+- **EIP-712 Domain Name:** `"USD Coin"`
+- **EIP-712 Domain Version:** `"2"`
+- **Default Treasury:** `0x420f9F9deA7fA318eA8996C8aA00ad9738D98072`
+
+### Base Sepolia (Testnet)
+- **CAIP-2 Identifier:** `eip155:84532`
+- **Chain ID:** `84532`
+- **USDC Contract:** `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+- **USDC Decimals:** `6`
+- **EIP-712 Domain Name:** `"USDC"`
+- **EIP-712 Domain Version:** `"2"`
+- **Default Treasury:** `0x420f9F9deA7fA318eA8996C8aA00ad9738D98072`
+
+---
+
+## 3. Catalog & Request Schemas
+
+All endpoints require `POST` with `Content-Type: application/json`. Discovery is available at `GET /.well-known/x402`.
+
+### 1. Academic Search (`/v1/academic/search`)
+- **Price:** $0.08 USDC (`80000` base units)
+- **Provider:** OpenAlex
+- **Request Body:**
+  ```json
+  {
+    "query": "string (required, search terms or academic subject)",
+    "limit": "number (optional, 1-20, default: 5)"
+  }
+  ```
+- **Response Structure:** Array of works with title, normalized DOI, publication year, citation count, open access status, author institutions.
+
+### 2. Academic Work by DOI (`/v1/academic/work`)
+- **Price:** $0.06 USDC (`60000` base units)
+- **Provider:** OpenAlex / Crossref
+- **Request Body:**
+  ```json
+  {
+    "doi": "string (required, e.g. '10.1038/s41586-020-2649-2')"
+  }
+  ```
+- **Response Structure:** Complete paper metadata, citation metrics, abstract, references, and publication venue.
+
+### 3. Crypto Price (`/v1/crypto/price`)
+- **Price:** $0.04 USDC (`40000` base units)
+- **Provider:** CoinGecko
+- **Request Body:**
+  ```json
+  {
+    "assets": ["string (required, e.g. ['bitcoin', 'ethereum'])"],
+    "vsCurrency": "string (optional, default: 'usd')"
+  }
+  ```
+- **Response Structure:** Live spot prices, 24-hour price change percentage, 24h high/low, and 24h volume.
+
+### 4. Crypto Market Overview (`/v1/crypto/market`)
+- **Price:** $0.06 USDC (`60000` base units)
+- **Provider:** CoinGecko
+- **Request Body:**
+  ```json
+  {
+    "assets": ["string (required, e.g. ['bitcoin', 'ethereum'])"]
+  }
+  ```
+- **Response Structure:** Market cap in USD, market cap rank, circulating supply, all-time high, and total volume.
+
+### 5. Foreign Exchange Reference Rates (`/v1/fx/rates`)
+- **Price:** $0.04 USDC (`40000` base units)
+- **Provider:** Frankfurter / European Central Bank
+- **Request Body:**
+  ```json
+  {
+    "baseCurrency": "string (optional, default: 'USD')",
+    "targets": ["string (optional, default: ['EUR', 'GBP', 'JPY'])"]
+  }
+  ```
+- **Response Structure:** Reference date and normalized exchange rates against the base currency.
+
+### 6. Weather Forecast (`/v1/weather`)
+- **Price:** $0.05 USDC (`50000` base units)
+- **Provider:** Open-Meteo
+- **Request Body:**
+  ```json
+  {
+    "latitude": "number (required, -90 to 90)",
+    "longitude": "number (required, -180 to 180)"
+  }
+  ```
+- **Response Structure:** Current temperature (°C), humidity, wind speed, weather code, and 3-day daily temperature forecasts.
+
+### 7. Place Geocoding (`/v1/geocode`)
+- **Price:** $0.04 USDC (`40000` base units)
+- **Provider:** Photon / OpenStreetMap
+- **Request Body:**
+  ```json
+  {
+    "query": "string (required, place name, city, or address)"
+  }
+  ```
+- **Response Structure:** Coordinates (latitude/longitude), country, city, postcode, and administrative hierarchy.
+
+### 8. Public Holidays (`/v1/holidays`)
+- **Price:** $0.04 USDC (`40000` base units)
+- **Provider:** Nager.Date
+- **Request Body:**
+  ```json
+  {
+    "countryCode": "string (required, ISO 3166-1 alpha-2, e.g. 'US', 'DE')",
+    "year": "number (optional, default: current UTC year)"
+  }
+  ```
+- **Response Structure:** Array of holidays with official date, local name, English name, and regional scope.
+
+### 9. Knowledge Entity Search (`/v1/knowledge/search`)
+- **Price:** $0.06 USDC (`60000` base units)
+- **Provider:** Wikidata
+- **Request Body:**
+  ```json
+  {
+    "query": "string (required, entity label or subject)"
+  }
+  ```
+- **Response Structure:** Wikidata entity IDs (Q-identifiers), official labels, descriptions, and Wikipedia article links.
+
+### 10. Tech News Search (`/v1/news/search`)
+- **Price:** $0.08 USDC (`80000` base units)
+- **Provider:** Hacker News / Algolia
+- **Request Body:**
+  ```json
+  {
+    "query": "string (required, keywords)"
+  }
+  ```
+- **Response Structure:** Filtered submissions from the past 30 days with title, external URL, points, comment counts, and creation timestamps.
+
+### 11. Research Topic Pack (`/v1/research`)
+- **Price:** $0.10 USDC (`100000` base units)
+- **Provider:** Multi-source composite
+- **Request Body:**
+  ```json
+  {
+    "topic": "string (required, research topic)"
+  }
+  ```
+- **Response Structure:** Composite evidence pack containing top academic papers, Wikidata knowledge graphs, and recent tech discussions.
+
+### 12. Claim Verification Evidence (`/v1/verify`)
+- **Price:** $0.12 USDC (`120000` base units)
+- **Provider:** Evidence verification composite
+- **Request Body:**
+  ```json
+  {
+    "claim": "string (required, factual statement or proposition)"
+  }
+  ```
+- **Response Structure:** Evidence sources, relevance matches, and provenance metadata (verdict marked `INSUFFICIENT` pending independent LLM evaluation).
+
+---
+
+## 4. Complete Wire Protocol & EIP-712 Signing
+
+### Step 1: Initial Probe
+```http
+POST /v1/academic/search HTTP/1.1
+Host: relayx402.vercel.app
+Content-Type: application/json
+
+{"query":"transformer attention mechanisms","limit":3}
+```
+
+### Step 2: Gateway Challenge
+```http
+HTTP/1.1 402 Payment Required
+Content-Type: application/json
+PAYMENT-REQUIRED: eyJ4NDAyVmVyc2lvbiI6MiwiZXJyb3IiOiJQYXltZW50IFJlcXVpcmVkIiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9yZWxheXg0MDIudmVyY2VsLmFwcC92MS9hY2FkZW1pYy9zZWFyY2giLCJkZXNjcmlwdGlvbiI6IlNlYXJjaCBzY2hvbGFybHkgbGl0ZXJhdHVyZSB2aWEgT3BlbkFsZXggd2l0aCBub3JtYWxpemVkIERPSTRzLCBjaXRhdGlvbnMsIGF1dGhvcnMsIGFuZCBvcGVuLWFjY2VzcyBzdGF0dXMuIiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJhbW91bnQiOiI4MDAwMCIsInBheVRvIjoiMHg0MjBmOUY5ZGVBN2ZBMzE4ZUE4OTk2QzhhQTAwYWQ5NzM4RDk4MDcyIiwibWF4VGltZW91dFNlY29uZHMiOjMwMCwiZXh0cmEiOnsibmFtZSI6IlVTRCBDb2luIiwidmVyc2lvbiI6IjIifX1dfQ==
+
+{
+  "x402Version": 2,
+  "error": "Payment Required",
+  "accepts": [{
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "amount": "80000",
+    "payTo": "0x420f9F9deA7fA318eA8996C8aA00ad9738D98072",
+    "maxTimeoutSeconds": 300,
+    "extra": { "name": "USD Coin", "version": "2" }
+  }]
+}
+```
+
+### Step 3: Payer Constructs EIP-712 Payload
+- **Primary Type:** `TransferWithAuthorization`
+- **Domain:**
+  ```json
+  {
+    "name": "USD Coin",
+    "version": "2",
+    "chainId": 8453,
+    "verifyingContract": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+  }
+  ```
+- **Message Values:**
+  - `from`: Payer agent's EVM address
+  - `to`: `0x420f9F9deA7fA318eA8996C8aA00ad9738D98072` (payTo)
+  - `value`: `80000n` (exact matching challenge)
+  - `validAfter`: `0n`
+  - `validBefore`: `BigInt(Math.floor(Date.now() / 1000) + 300)`
+  - `nonce`: `0x...` (random 32-byte hex)
+
+### Step 4: Paid Request with PAYMENT-SIGNATURE
+```http
+POST /v1/academic/search HTTP/1.1
+Host: relayx402.vercel.app
+Content-Type: application/json
+PAYMENT-SIGNATURE: <base64-encoded-x402-proof>
+
+{"query":"transformer attention mechanisms","limit":3}
+```
+
+### Step 5: Confirmed Settlement Response
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+PAYMENT-RESPONSE: <base64-encoded-settlement-receipt>
+
+{
+  "results": [ ... ],
+  "retrieved_at": "2026-11-07T05:00:00.000Z",
+  "provider": "OpenAlex"
+}
+```
+
+---
+
+## 5. Reference Viem TypeScript Implementation
+
+```typescript
+import { createWalletClient, http, encodeFunctionData, parseUnits } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
+
+const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY as `0x${string}`);
+const client = createWalletClient({ account, chain: base, transport: http() });
+
+export async function queryRelay(path: string, body: Record<string, unknown>) {
+  const url = `https://relayx402.vercel.app${path}`;
+
+  // 1. Unsigned probe
+  const probe = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (probe.status !== 402) return probe.json();
+
+  // 2. Decode challenge
+  const challengeHeader = probe.headers.get('PAYMENT-REQUIRED');
+  const challenge = JSON.parse(Buffer.from(challengeHeader!, 'base64').toString('utf8'));
+  const requirement = challenge.accepts[0];
+
+  // 3. Construct EIP-712 signature
+  const nonce = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`;
+  const now = Math.floor(Date.now() / 1000);
+  const validBefore = BigInt(now + requirement.maxTimeoutSeconds);
+
+  const domain = {
+    name: requirement.extra.name,
+    version: requirement.extra.version,
+    chainId: 8453,
+    verifyingContract: requirement.asset as `0x${string}`
+  };
+
+  const types = {
+    TransferWithAuthorization: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' },
+      { name: 'validBefore', type: 'uint256' },
+      { name: 'nonce', type: 'bytes32' }
+    ]
+  };
+
+  const message = {
+    from: account.address,
+    to: requirement.payTo,
+    value: BigInt(requirement.amount),
+    validAfter: 0n,
+    validBefore,
+    nonce
+  };
+
+  const signature = await client.signTypedData({ domain, types, primaryType: 'TransferWithAuthorization', message });
+
+  // 4. Construct x402 payment proof
+  const proof = {
+    x402Version: 2,
+    resource: challenge.resource,
+    accepted: requirement,
+    payload: {
+      signature,
+      authorization: {
+        from: account.address,
+        to: requirement.payTo,
+        value: requirement.amount,
+        validAfter: '0',
+        validBefore: validBefore.toString(),
+        nonce
+      }
+    }
+  };
+
+  // 5. Send paid request
+  const paidResponse = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'PAYMENT-SIGNATURE': Buffer.from(JSON.stringify(proof)).toString('base64')
+    },
+    body: JSON.stringify(body)
+  });
+
+  return paidResponse.json();
+}
+```

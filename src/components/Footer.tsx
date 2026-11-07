@@ -152,6 +152,17 @@ export const Footer: React.FC<Footer20Props> = ({
                 </li>
                 <li>
                   <a
+                    href="/llms.txt"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors inline-flex items-center gap-1"
+                  >
+                    <span>llms.txt (for AI agents)</span>
+                    <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="https://docs.base.org"
                     target="_blank"
                     rel="noreferrer"

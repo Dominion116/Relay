@@ -1,0 +1,115 @@
+# Relay
+
+> Pay-per-request data gateway for AI agents and autonomous runtimes, implementing canonical x402 v2 micropayments with native USDC on Base.
+
+## Overview
+
+Relay provides programmatic, pay-per-call data endpoints for autonomous AI agents without subscriptions, credit cards, or API keys. Payments settle natively on Base in micro-USDC using the canonical x402 v2 protocol.
+
+- **Wire Protocol:** HTTP status code `402 Payment Required` with `PAYMENT-REQUIRED` and `PAYMENT-SIGNATURE` headers.
+- **Settlement Primitive:** ERC-3009 `TransferWithAuthorization` via EIP-712 typed signatures.
+- **Gas Model:** Zero ETH required by agent wallets. The Primer Systems public x402 facilitator (`https://x402.primer.systems`) submits the transaction on Base and sponsors execution gas.
+- **Networks:** Base Mainnet (`eip155:8453`) by default; Base Sepolia (`eip155:84532`) for testing.
+
+## Live Endpoints & Pricing
+
+Discovery endpoint: `GET /.well-known/x402`
+
+| Endpoint | Method | Cost (USDC) | Description |
+|---|---|---|---|
+| `/v1/academic/search` | POST | $0.08 | Search scholarly literature via OpenAlex (normalized DOIs, authors, citations, open access) |
+| `/v1/academic/work` | POST | $0.06 | Retrieve scholarly work metadata and citation metrics by DOI |
+| `/v1/crypto/price` | POST | $0.04 | Spot prices and 24h percentage changes via CoinGecko in requested quote currency |
+| `/v1/crypto/market` | POST | $0.06 | Market capitalization, volume, rank, circulating supply via CoinGecko |
+| `/v1/fx/rates` | POST | $0.04 | European Central Bank reference exchange rates via Frankfurter |
+| `/v1/weather` | POST | $0.05 | Current conditions and 3-day forecast by coordinates via Open-Meteo |
+| `/v1/geocode` | POST | $0.04 | Forward place-name geocoding to coordinates via OpenStreetMap / Photon |
+| `/v1/holidays` | POST | $0.04 | National and regional public holiday schedules via Nager.Date |
+| `/v1/knowledge/search` | POST | $0.06 | Search Wikidata entity identifiers, labels, and descriptions |
+| `/v1/news/search` | POST | $0.08 | Search recent Hacker News submissions (last 30 days) via Algolia |
+| `/v1/research` | POST | $0.10 | Multi-source research pack combining academic papers, Wikidata, and news |
+| `/v1/verify` | POST | $0.12 | Retrieve related evidence for claim verification |
+
+## Integration for AI Agents
+
+### 1. Model Context Protocol (MCP)
+
+Relay includes a native MCP server for Claude Desktop, Cursor, and any MCP-compliant agent harness:
+
+```json
+{
+  "mcpServers": {
+    "relay": {
+      "command": "node",
+      "args": [
+        "--env-file-if-exists=.env",
+        "--import",
+        "tsx",
+        "/absolute/path/to/Relay/src/mcp/relay-mcp.ts"
+      ],
+      "env": {
+        "AGENT_PRIVATE_KEY": "0x...",
+        "BASE_NETWORK": "base",
+        "GATEWAY_ORIGIN": "https://relayx402.vercel.app",
+        "RELAY_TREASURY_ADDRESS": "0x420f9F9deA7fA318eA8996C8aA00ad9738D98072",
+        "MAX_PAYMENT_USDC": "0.20",
+        "MAX_DAILY_BUDGET_USDC": "5.00"
+      }
+    }
+  }
+}
+```
+
+### 2. TypeScript / Node SDK
+
+Autonomous agent scripts can call endpoints using `RelayClient`:
+
+```typescript
+import { RelayClient } from './src/sdk/index.ts';
+
+const relay = new RelayClient({
+  privateKey: process.env.AGENT_PRIVATE_KEY || '',
+  gatewayUrl: 'https://relayx402.vercel.app',
+  network: 'base', // or 'base-sepolia'
+  treasuryAddress: '0x420f9F9deA7fA318eA8996C8aA00ad9738D98072',
+  maxPaymentUsdc: '0.20',
+  maxDailyBudgetUsdc: '5.00'
+});
+
+// Autonomous calls - payments sign and settle gaslessly on Base
+const papers = await relay.academic.search('quantum computing', 5);
+console.log(papers.data);
+
+const crypto = await relay.crypto.price(['bitcoin', 'ethereum'], 'usd');
+console.log(crypto.data);
+```
+
+### 3. Direct HTTP Wire Protocol (x402 v2)
+
+1. **Unsigned Probe:** Agent sends `POST /v1/{resource}` with `Content-Type: application/json`.
+2. **HTTP 402 Response:** Gateway returns `402 Payment Required` with Base64 header `PAYMENT-REQUIRED` specifying `exact` scheme, `network`, `asset`, `amount`, and `payTo`.
+3. **EIP-712 Signature:** Agent constructs ERC-3009 `TransferWithAuthorization` and signs off-chain.
+4. **Paid Execution:** Agent resends request with header `PAYMENT-SIGNATURE: <base64-json-payload>`.
+5. **Settlement & Data:** Gateway settles via Primer Systems facilitator (`https://x402.primer.systems`), confirms on-chain, and returns `HTTP 200 OK` with `PAYMENT-RESPONSE` header and data.
+
+## Network & Contract Reference
+
+- **Base Mainnet (`eip155:8453`):**
+  - Chain ID: `8453`
+  - Native USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+  - EIP-712 Domain: `{ name: "USD Coin", version: "2", chainId: 8453, verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }`
+
+- **Base Sepolia Testnet (`eip155:84532`):**
+  - Chain ID: `84532`
+  - Test USDC: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+  - EIP-712 Domain: `{ name: "USDC", version: "2", chainId: 84532, verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" }`
+
+- **Facilitator:**
+  - URL: `https://x402.primer.systems` (Public gasless settlement)
+
+## Documentation & Links
+
+- Full LLM Reference: `/llms-full.txt`
+- Catalog Discovery: `/.well-known/x402`
+- Interactive Playground: `/playground`
+- Protocol Specification: `/protocol`
