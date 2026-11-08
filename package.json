@@ -11,6 +11,8 @@
     "build": "tsc && vite build && node scripts/build-api.js",
     "preview": "node --env-file-if-exists=.env node_modules/vite/bin/vite.js preview",
     "mcp": "node --env-file-if-exists=.env --import tsx src/mcp/server.ts",
+    "demo:mcp": "node --env-file-if-exists=.env --import tsx scripts/demo-mcp.ts",
+    "demo:sdk": "node --env-file-if-exists=.env --import tsx scripts/demo-sdk.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --import ./tests/setup.ts --test --test-concurrency=2 tests/*.test.ts",
     "test:api": "node --import ./tests/setup.ts --test tests/built-api/*.test.mjs",
