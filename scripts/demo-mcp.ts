@@ -1,26 +1,26 @@
 /**
- * Relay Official MCP Demo Script
- * Demonstrates how an AI Agent (Claude, Cursor, AutoGPT) discovers and executes
- * paid Relay tools via MCP with autonomous EIP-712 micro-settlements on Base Sepolia.
+ * Relay Official MCP Terminal Demo Script
+ * Demonstrates invoking the Relay Model Context Protocol (MCP) server directly
+ * from the terminal with automatic EIP-712 micro-settlements on Base Sepolia.
  */
 import { getMcpToolsList, executeMcpTool } from '../src/mcp/relay-mcp';
 
 async function main() {
   console.log('\n================================================================');
-  console.log('🤖 RELAY MCP SERVER — AUTONOMOUS AI AGENT EXECUTION');
+  console.log('💻 RELAY MCP — DIRECT TERMINAL EXECUTION');
   console.log('================================================================\n');
 
-  // 1. Tool Discovery
-  console.log('📡 Step 1: Querying Model Context Protocol (MCP) Tool Catalog...');
+  // 1. Tool Discovery via MCP
+  console.log('📡 Step 1: Discovering tools from Relay MCP Server (tools/list)...');
   const tools = getMcpToolsList();
-  console.log(`✅ Discovered ${tools.length} payment-enabled tools:`);
+  console.log(`✅ Server exposes ${tools.length} payment-enabled MCP tools:`);
   tools.slice(0, 4).forEach(t => console.log(`   - ${t.name}: ${t.description.split('] ')[1] || t.description}`));
   console.log(`   ... and ${tools.length - 4} more tools.\n`);
 
-  // 2. Autonomous Tool Invocation
-  console.log('⚡ Step 2: Agent invokes MCP tool: relay_crypto_price');
-  console.log('   Arguments: { assets: ["bitcoin", "ethereum"], vsCurrency: "usd" }');
-  console.log('   Enforcing persistent budget limits & x402 v2 settlement...');
+  // 2. Direct Terminal Tool Invocation
+  console.log('⚡ Step 2: Executing MCP tool from terminal: relay_crypto_price');
+  console.log('   Input: { assets: ["bitcoin", "ethereum"], vsCurrency: "usd" }');
+  console.log('   Executing gasless x402 v2 payment on Base Sepolia...');
 
   const startTime = Date.now();
   const result = await executeMcpTool('relay_crypto_price', {
@@ -50,7 +50,7 @@ async function main() {
   console.log(`Latency:          ${duration}ms\n`);
 
   console.log('================================================================');
-  console.log('📊 LIVE DATA DELIVERED TO AGENT CONTEXT:');
+  console.log('📊 LIVE DATA RETURNED FROM RELAY MCP:');
   console.log('================================================================');
   for (const price of data.prices) {
     console.log(`- ${price.asset.toUpperCase()} (${price.symbol}): $${price.price.toLocaleString()} USD (24h: ${price.change_24h_percent}%)`);
