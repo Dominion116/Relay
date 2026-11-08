@@ -6,15 +6,15 @@
     <title>Relay: Pay-per-use information infrastructure on Base via x402</title>
     <meta
       name="description"
-      content="Relay is an open pay-per-use data and capability infrastructure for AI agents and vibecoders. Paid per request in USDC on Base via the x402 protocol."
+      content="Relay is an autonomous x402 v2 micropayment gateway for AI agents on Base. Eliminates API keys and subscription lock-in with gasless per-request USDC micro-settlements and native Model Context Protocol (MCP) integration."
     />
     <meta name="theme-color" content="#0a0a0a" />
 
     <!-- Open Graph / Facebook / LinkedIn / Farcaster -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://relayx402.vercel.app/" />
-    <meta property="og:title" content="Relay | Pay-per-use information infrastructure on Base via x402" />
-    <meta property="og:description" content="Relay is an open pay-per-use data and capability infrastructure for AI agents and vibecoders. Paid per request in USDC on Base via the x402 protocol." />
+    <meta property="og:title" content="Relay | Autonomous x402 Micropayment Infrastructure for AI Agents on Base" />
+    <meta property="og:description" content="Relay replaces API keys, credit cards, and monthly SaaS subscriptions with native x402 v2 USDC micropayments and Model Context Protocol (MCP) tools for autonomous AI agents on Base." />
     <meta property="og:image" content="https://relayx402.vercel.app/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -22,8 +22,8 @@
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://relayx402.vercel.app/" />
-    <meta name="twitter:title" content="Relay | Pay-per-use information infrastructure on Base via x402" />
-    <meta name="twitter:description" content="Relay is an open pay-per-use data and capability infrastructure for AI agents and vibecoders. Paid per request in USDC on Base via the x402 protocol." />
+    <meta name="twitter:title" content="Relay | Autonomous x402 Micropayment Infrastructure for AI Agents on Base" />
+    <meta name="twitter:description" content="Relay replaces API keys, credit cards, and monthly SaaS subscriptions with native x402 v2 USDC micropayments and Model Context Protocol (MCP) tools for autonomous AI agents on Base." />
     <meta name="twitter:image" content="https://relayx402.vercel.app/og-image.png" />
 
     <link rel="icon" type="image/svg+xml" href="/relaylogo.svg" />
@@ -38,11 +38,20 @@
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "Relay",
-      "applicationCategory": "FinTech / DeveloperApplication",
-      "operatingSystem": "Base (EVM Chain 8453 / 84532), Web, MCP",
-      "description": "Canonical x402 v2 micropayment infrastructure on Base. Pay-per-request data and capability gateway for autonomous AI agents with zero API keys or monthly subscriptions.",
+      "applicationCategory": "FinTech / DeveloperApplication / AI Infrastructure",
+      "operatingSystem": "Base (EVM Chain 8453 / 84532), Web, MCP, Node.js",
+      "description": "Canonical x402 v2 micropayment gateway for AI agents on Base. Eliminates API keys, credit cards, and recurring subscriptions with gasless per-call USDC micro-settlement, native MCP tool discovery, and local budget enforcement.",
       "url": "https://relayx402.vercel.app/",
       "codeRepository": "https://github.com/Dominion116/Relay",
+      "featureList": [
+        "Canonical x402 v2 HTTP micropayment wire protocol",
+        "Native Model Context Protocol (MCP) server for Claude Desktop, Cursor, and automated CLI swarms",
+        "Gasless EIP-712 ERC-3009 transfer authorizations sponsored by Primer Systems",
+        "Deterministic local budget store preventing runaway spend loops and overbilling",
+        "12 live production-grade information retrieval endpoints on Base",
+        "Open capability provider registration and bonding marketplace",
+        "Vibestarter $RELAY token economics: 50% discount, quota staking, 20% protocol buyback & burn"
+      ],
       "offers": {
         "@type": "AggregateOffer",
         "priceCurrency": "USD",
@@ -58,57 +67,80 @@
       <!-- Pre-rendered Semantic Content for Crawlers, Indexers & Fundable Scanners -->
       <header style="padding: 24px; border-bottom: 1px solid #222;">
         <h1>Relay: Pay-Per-Request Capability Infrastructure for AI Agents on Base</h1>
-        <p>Canonical x402 v2 protocol implementation with gasless EIP-712 USDC micro-settlements on Base Mainnet and Base Sepolia.</p>
-        <nav>
-          <a href="https://github.com/Dominion116/Relay" target="_blank" rel="noopener noreferrer">GitHub Repository (Open Source)</a> |
-          <a href="https://relayx402.vercel.app/.well-known/x402">x402 Discovery Manifest</a> |
-          <a href="https://relayx402.vercel.app/docs">API Documentation</a>
+        <p>Canonical x402 v2 protocol implementation with gasless EIP-712 USDC micro-settlements, native Model Context Protocol (MCP) server, and fail-closed budget security on Base Mainnet and Base Sepolia.</p>
+        <nav style="margin-top: 12px;">
+          <a href="https://github.com/Dominion116/Relay" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; font-weight: bold;">GitHub Repository (Open Source)</a> |
+          <a href="https://relayx402.vercel.app/.well-known/x402" style="color: #aaa;">x402 Discovery Manifest</a> |
+          <a href="https://relayx402.vercel.app/docs" style="color: #aaa;">API Documentation</a> |
+          <a href="https://relayx402.vercel.app/playground" style="color: #aaa;">Live Web Testbench</a>
         </nav>
       </header>
 
       <main style="padding: 24px;">
-        <section>
-          <h2>The Machine-to-Machine Payment Protocol</h2>
-          <p>Autonomous AI agents cannot hold corporate credit cards, pass KYC, or commit to $50/month SaaS subscriptions. Relay revives HTTP status 402, allowing agents to pay fractions of a cent ($0.04 - $0.12 USDC) per request directly from their wallet.</p>
-          <p><strong>Open Marketplace Architecture:</strong> Beyond the 12 initial genesis feeds, Relay serves as a permissionless capability monetization network where any third-party data provider, proprietary AI model, or compute node can publish APIs and earn instant USDC micropayments via x402.</p>
-        </section>
-
-        <section>
-          <h2>Verified Product Metrics & Reliability</h2>
+        <section style="margin-bottom: 32px;">
+          <h2>1. The Urgent Problem: Why API Keys & SaaS Subscriptions Fail Autonomous Agents</h2>
+          <p>The AI economy is shifting from human prompt-engineers to fully autonomous agent swarms (Devin, AutoGPT, Claude Code, Cursor). However, traditional Web2 monetization creates critical blockers:</p>
           <ul>
-            <li><strong>12 Live Production Endpoints:</strong> Crypto Spot, Market Metrics, Academic Search (OpenAlex), DOI Inspection, ECB FX, Weather, Global Holidays, News, and Claim Evidence.</li>
-            <li><strong>181 / 181 Unit Tests Passing:</strong> 100% test pass rate with zero Thirdweb dependencies, built on Viem and Wagmi.</li>
-            <li><strong>Gasless EIP-712 Settlement:</strong> Fully sponsored by the Primer Systems public facilitator on Base Mainnet (8453) and Base Sepolia (84532).</li>
-            <li><strong>Official MCP Server:</strong> Model Context Protocol stdio integration for Claude Desktop, Cursor, Windsurf, and CLI autonomous agents.</li>
-            <li><strong>73ms Gateway Latency:</strong> Real-time streaming with zero API keys required.</li>
+            <li><strong>Subagent Delegation & Runaway Loop Risk:</strong> Autonomous agents spawning parallel subagents cannot be given master corporate credit cards or static API keys. A runaway recursive agent loop with an API key can drain thousands of dollars in credit card billing. Relay enforces strict, cryptographically-enforced local budget limits (e.g. $0.10 max per call, $2.00 daily cap) that physically abort before signing if exceeded.</li>
+            <li><strong>The Long-Tail Subscription Impossibility:</strong> Real-world agents require diverse, unpredictable capabilities: one weather check, one academic citation, one FX rate, one flight status. Subscribing to 10 separate SaaS platforms costs $200–$500/month in fixed subscriptions for pennies of actual data. Relay allows agents to pay $0.04 strictly per call with zero monthly commitments.</li>
+            <li><strong>Machine-to-Machine Financial Identity:</strong> Autonomous agents cannot pass KYC, enter CVV codes, or open Stripe accounts. x402 on Base gives software a native crypto-economic identity to buy and sell data peer-to-peer.</li>
           </ul>
         </section>
 
-        <section>
-          <h2>$RELAY Token Utility & Backer Economics (Vibestarter)</h2>
-          <p>Designed for the Vibestarter raise, the $RELAY token has an indispensable Day-1 operational role within the gateway economics:</p>
+        <section style="margin-bottom: 32px;">
+          <h2>2. Architectural Differentiation: How Relay Wins Against Generic Gateways</h2>
+          <p>While generic x402 projects are raw developer libraries or basic API proxies, Relay is built from the ground up as production agent infrastructure:</p>
           <ul>
-            <li><strong>50% Protocol Fee Discount:</strong> Queries settled in $RELAY receive an automatic 50% fee discount against standard USDC pricing, driving organic buy demand from agent operators.</li>
-            <li><strong>Agent Quota Staking:</strong> AI agent swarms and enterprises stake $RELAY to unlock permanent, daily gasless query quotas without micropayment overhead.</li>
-            <li><strong>Marketplace Provider Bonding:</strong> Third-party capability providers stake $RELAY as quality collateral against SLA violations, data corruption, or provider downtime.</li>
-            <li><strong>20% Programmatic Buyback & Burn:</strong> 20% of all gateway USDC settlement fees are programmatically routed to buy back and burn $RELAY on Base decentralized exchanges (Uniswap / Aerodrome).</li>
+            <li><strong>Native Model Context Protocol (MCP) Server:</strong> Relay provides an official, out-of-the-box JSON-RPC stdio MCP server (<code>src/mcp/server.ts</code>). AI agents in Claude Desktop, Cursor, Windsurf, or automated CLI scripts (<code>npm run demo:mcp</code>) discover all 12 tools and settle payments autonomously with zero custom Web3 glue code.</li>
+            <li><strong>Persistent Atomic Budget Engine (<code>FileBudgetStore</code>):</strong> Relay's runtime includes an atomic file-backed budget engine that survives process restarts, deduplicates transaction nonces, handles HTTP 502/503 timeouts without double-charging, and strictly fails closed.</li>
+            <li><strong>Zero-Gas Payer Experience:</strong> Leverages EIP-712 ERC-3009 transfer authorizations. The Primer Systems public facilitator submits the transaction and covers all Base network gas. The agent's wallet only holds USDC—zero ETH required.</li>
+            <li><strong>Open Capability Marketplace Architecture:</strong> The 12 initial endpoints (Crypto Spot, Market Metrics, Academic Search via OpenAlex, DOI Work Lookup, ECB FX, Weather, Global Holidays, News, Claim Evidence) serve as the verified reference catalog. Relay is designed as an open marketplace where third-party developers stake $RELAY to register proprietary APIs and monetize them directly from agent swarms.</li>
           </ul>
         </section>
 
-        <section>
-          <h2>Quick Start for Autonomous Agents</h2>
-          <pre><code>npm install
-npm run dev
-# Run autonomous MCP agent in terminal:
+        <section style="margin-bottom: 32px;">
+          <h2>3. Verified Product Metrics & Production Readiness (No Mock Promises)</h2>
+          <ul>
+            <li><strong>12 Live Production Endpoints:</strong> Verified real-time data streaming on Base Mainnet (<code>eip155:8453</code>) and Base Sepolia (<code>eip155:84532</code>).</li>
+            <li><strong>181 / 181 Passing Unit Tests (100% Pass Rate):</strong> Exhaustive offline test suite covering re-entrancy, budget exhaustion, nonce serialization, provider failovers, and payment receipts.</li>
+            <li><strong>Zero Thirdweb Dependencies:</strong> Built with modern, secure Viem, Wagmi, and official @x402/core protocols.</li>
+            <li><strong>73ms Verified Latency:</strong> Lightning-fast response times with no intermediate API key exchanges.</li>
+            <li><strong>Open Source & Inspectable:</strong> Full codebase public and verifiable on GitHub at <a href="https://github.com/Dominion116/Relay">https://github.com/Dominion116/Relay</a>.</li>
+          </ul>
+        </section>
+
+        <section style="margin-bottom: 32px;">
+          <h2>4. $RELAY Token Utility & Deflationary Backer Flywheel (Vibestarter)</h2>
+          <p>For the Vibestarter raise, the $RELAY token has an indispensable Day-1 operational role within the protocol economy:</p>
+          <ul>
+            <li><strong>50% Protocol Fee Discount:</strong> Autonomous agents settling x402 challenges in $RELAY instead of USDC receive an automatic 50% discount, creating organic buy pressure directly tied to query volume.</li>
+            <li><strong>Agent Quota Staking:</strong> AI agent swarms and enterprise operators stake $RELAY to unlock permanent, daily gasless query credits without per-request micro-billing friction.</li>
+            <li><strong>Marketplace Provider Bonding:</strong> Third-party capability providers stake $RELAY as quality collateral against SLA violations, provider downtime, or data corruption.</li>
+            <li><strong>20% Programmatic Buyback & Burn:</strong> 20% of all gateway USDC settlement fees collected by the treasury are programmatically routed to buy back and burn $RELAY on Base decentralized exchanges (Aerodrome / Uniswap), directly tying protocol cash-flow to deflationary token value.</li>
+          </ul>
+        </section>
+
+        <section style="margin-bottom: 32px;">
+          <h2>5. Quick Start for Autonomous Agents & Developers</h2>
+          <pre><code># Clone and test locally:
+git clone https://github.com/Dominion116/Relay.git
+cd Relay
+npm install
+
+# Run autonomous MCP agent in terminal (Base Sepolia testnet):
 npm run demo:mcp
-# Run TypeScript SDK client:
-npm run demo:sdk</code></pre>
+
+# Run autonomous TypeScript SDK query:
+npm run demo:sdk
+
+# Launch interactive Web Playground:
+npm run dev</code></pre>
         </section>
       </main>
 
       <footer style="padding: 24px; border-top: 1px solid #222; font-size: 14px;">
-        <p>Relay Protocol &copy; 2026. Built on Base. Open source under the MIT License.</p>
-        <p>GitHub: <a href="https://github.com/Dominion116/Relay">https://github.com/Dominion116/Relay</a></p>
+        <p>Relay Protocol &copy; 2026. Built natively on Base. Open source under the MIT License.</p>
+        <p>GitHub Repository: <a href="https://github.com/Dominion116/Relay">https://github.com/Dominion116/Relay</a></p>
       </footer>
     </div>
     <noscript>

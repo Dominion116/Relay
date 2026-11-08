@@ -1473,7 +1473,8 @@ async function handleGatewayRequest(method, pathname, headers, rawBody, origin =
     const serialized = JSON.stringify(data);
     if (serialized === void 0 || Buffer.byteLength(serialized, "utf8") > 1e6) throw new Error("Invalid provider response size.");
     data = JSON.parse(serialized);
-  } catch {
+  } catch (cause) {
+    console.error("Provider dispatch error in gatewayHandler:", cause);
     return respond(502, { error: "Upstream Provider Error", message: "The provider could not fulfill the request. No payment was submitted." });
   }
   let settlement;

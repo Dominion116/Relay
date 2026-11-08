@@ -13,8 +13,6 @@ out/
 .vite/
 
 # Environment files
-.env
-.env.*
 *.env
 !.env.example
 
@@ -47,7 +45,6 @@ next-env.d.ts
 *.njsproj
 *.sln
 *.sw?
-.vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 
@@ -66,3 +63,4 @@ Desktop.ini
 
 REMEDIATION_PLAN.md
 .kilo
+config.bat

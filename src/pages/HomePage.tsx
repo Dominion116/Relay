@@ -142,7 +142,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 Why traditional API subscriptions fail AI agents
               </h2>
               <p className="text-[15px] leading-relaxed text-neutral-400">
-                Legacy Web2 APIs force autonomous agents to manage human credit cards, monthly recurring commitments, and static developer keys. Relay provides pay-per-request programmatic capabilities settled natively in micro-USDC on Base.
+                Legacy Web2 APIs force autonomous agents to manage human credit cards, monthly recurring commitments, and static developer keys. When autonomous swarms spawn subagents, static keys create catastrophic runaway billing risks. Relay provides pay-per-request programmatic capabilities settled natively in micro-USDC on Base with deterministic cryptographic budgets.
               </p>
             </div>
 
@@ -159,7 +159,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-800/80">
                     <div>
                       <span className="text-xs font-mono text-neutral-500 block mb-1">Architecture</span>
-                      <h3 className="text-lg font-medium text-neutral-100">Traditional SaaS APIs</h3>
+                      <h3 className="text-lg font-medium text-neutral-100">Traditional SaaS & API Keys</h3>
                     </div>
                     <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-neutral-800/80 text-neutral-400 border border-neutral-700/60">
                       Legacy model
@@ -172,7 +172,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Minus className="size-3 text-neutral-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Human credit card required:</strong> AI agents cannot pass KYC, enter CVV codes, or hold corporate credit cards.
+                        <strong className="font-medium text-neutral-100">Unbounded runaway loop exposure:</strong> Distributing static master API keys to autonomous subagents risks infinite billing loops and credential theft with zero hard cryptographic spending caps.
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -180,7 +180,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Minus className="size-3 text-neutral-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Opaque monthly subscriptions:</strong> $20 to $500 monthly commitments regardless of whether the agent executes 1 query or 10,000 queries.
+                        <strong className="font-medium text-neutral-100">Long-tail subscription overhead:</strong> Needing an occasional weather check or academic search forces developers into $20–$100 monthly commitments across 10 different SaaS providers.
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -188,15 +188,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Minus className="size-3 text-neutral-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Leaked static API keys:</strong> Long-lived secrets committed to code repositories or leaked during autonomous tool execution.
+                        <strong className="font-medium text-neutral-100">Zero machine-to-machine billing:</strong> Autonomous agents cannot pass KYC, enter CVV codes, or invoice other agents through traditional payment rails.
                       </div>
                     </li>
                   </ul>
                 </div>
 
                 <div className="mt-8 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-500">
-                  <span>Billing: Monthly recurrent</span>
-                  <span>Setup: Manual account KYC</span>
+                  <span>Billing: Monthly recurrent ($20 - $500/mo)</span>
+                  <span>Safety: Uncapped credit card liability</span>
                 </div>
               </motion.div>
 
@@ -207,7 +207,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-800/80">
                     <div>
-                      <span className="text-xs font-mono text-blue-400 block mb-1">x402 Protocol</span>
+                      <span className="text-xs font-mono text-blue-400 block mb-1">x402 Protocol + Native MCP</span>
                       <h3 className="text-lg font-medium text-neutral-100">Relay on Base</h3>
                     </div>
                     <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -221,7 +221,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Check className="size-3 text-blue-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Native USDC microtransactions:</strong> Settled in canonical Base USD Coin (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs font-mono">0x8335...2913</code>) at exact per-call costs.
+                        <strong className="font-medium text-neutral-100">Native Model Context Protocol (MCP):</strong> Official stdio MCP server enables Claude Desktop, Cursor, and automated agent swarms to discover and invoke tools out-of-the-box.
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -229,7 +229,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Check className="size-3 text-blue-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Zero ETH gas needed:</strong> Gasless EIP-712 transfer authorizations under ERC-3009. Agents sign off-chain; facilitator covers execution.
+                        <strong className="font-medium text-neutral-100">Fail-closed cryptographic budget caps:</strong> Enforces strict per-call ceilings and daily budget allowances via an atomic, persistent local store (<code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded text-xs font-mono">FileBudgetStore</code>).
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -237,15 +237,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <Check className="size-3 text-blue-400" />
                       </div>
                       <div>
-                        <strong className="font-medium text-neutral-100">Explicit agent payment policies:</strong> Repository-local SDK and stdio MCP integration with per-call and daily spending limits.
+                        <strong className="font-medium text-neutral-100">Gasless micro-settlement in USDC:</strong> Off-chain EIP-712 ERC-3009 permits. Primer Systems facilitator sponsors execution gas on Base Mainnet and Sepolia. Zero ETH needed.
                       </div>
                     </li>
                   </ul>
                 </div>
 
                 <div className="mt-8 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-400">
-                  <span className="text-blue-400">Billing: Per request ($0.04 - $0.12)</span>
-                  <span className="text-neutral-300">Setup: Zero accounts</span>
+                  <span className="text-blue-400">Billing: Per request ($0.04 - $0.12 USDC)</span>
+                  <span className="text-neutral-300">Safety: Atomic budget enforcement</span>
                 </div>
               </motion.div>
             </motion.div>

@@ -6,13 +6,17 @@
 
 ## 1. System Architecture
 
-Relay is a pay-per-request data gateway designed for autonomous AI agents. Traditional APIs require credit cards, human identity verification, and monthly recurring commitments. Relay enables autonomous agents to pay strictly for the data they consume, settled in micro-USDC directly on Coinbase's Base Layer 2.
+Relay is a pay-per-request data and capability gateway designed specifically for autonomous AI agents. Traditional APIs require human credit cards, KYC identity verification, and monthly recurring commitments. Furthermore, distributing static API keys to autonomous subagents creates catastrophic financial exposure to runaway recursive loops.
 
-### Architectural Invariants:
-1. **Canonical x402 v2:** Adheres strictly to the x402 v2 payment wire specification.
-2. **ERC-3009 Gasless Settlement:** Payer agents sign typed `TransferWithAuthorization` authorizations via EIP-712. Agents hold only native USDC; no ETH gas balance is required in agent wallets.
-3. **Public Facilitator Delegation:** On-chain submission and network gas sponsorship are handled by the Primer Systems public x402 facilitator (`https://x402.primer.systems`).
-4. **Idempotent & Replay Protected:** Every payment uses a distinct 32-byte cryptographic nonce with strict 300-second validity timeouts.
+Relay solves this by enabling autonomous agents to pay strictly for the data they consume, settled in micro-USDC directly on Base via canonical x402 v2 with deterministic, local budget ceilings.
+
+### Core Architectural Differentiators:
+1. **Canonical x402 v2:** Adheres strictly to the x402 v2 payment wire specification with distinct 32-byte nonces and 300-second validity windows.
+2. **Native Model Context Protocol (MCP) Server:** Official stdio MCP server (`src/mcp/server.ts`) allows Claude, Cursor, Windsurf, or automated CLI agent swarms to discover and invoke tools out-of-the-box.
+3. **Atomic Fail-Closed Budget Store:** Local `FileBudgetStore` enforces per-call price ceilings (`MAX_PAYMENT_USDC`) and daily spending limits (`MAX_DAILY_BUDGET_USDC`) that survive restarts and never oversubscribe.
+4. **ERC-3009 Gasless Settlement:** Payer agents sign typed `TransferWithAuthorization` authorizations via EIP-712. Agents hold only native USDC; no ETH gas balance is required in agent wallets.
+5. **Public Facilitator Delegation:** On-chain submission and network gas sponsorship are handled by the Primer Systems public x402 facilitator (`https://x402.primer.systems`).
+6. **Open Capability Marketplace:** Beyond the 12 initial genesis endpoints, Relay provides an open architecture where third-party providers stake $RELAY to register custom APIs and monetize them directly.
 
 ---
 

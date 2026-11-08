@@ -46,7 +46,23 @@ By implementing the canonical **x402 v2** micropayment protocol with native USDC
 
 ---
 
-## Architecture & Settlement Flow
+## Why Relay? Problem & Differentiation
+
+### The Problem: Why Traditional API Subscriptions Fail Autonomous Agents
+The software industry is transitioning from human prompt engineers to autonomous AI agent swarms (Devin, AutoGPT, Claude Code, Cursor). However, traditional monetization models create severe structural failures:
+1. **Subagent Delegation & Runaway Loop Exposure:** When an autonomous agent spawns 20 parallel subagents to complete a task, it cannot safely pass master API keys or credit cards. A recursive hallucination or runaway query loop with a credit-card-backed API key can rack up thousands of dollars in unbounded liability.
+2. **The Long-Tail Subscription Impossibility:** Real-world agents require heterogeneous, infrequent capabilities: one academic paper lookup, one weather forecast, one foreign exchange rate, one geocode lookup. Subscribing to 10 separate SaaS platforms costs **$200–$500/month in fixed fees** for what amounts to **$0.30 of actual data usage**.
+3. **Machine-to-Machine Autonomous Commerce:** Autonomous software cannot pass KYC, enter CVV numbers, or open Stripe accounts. They need native, peer-to-peer programmable financial rails.
+
+### How Relay Wins: Architectural Differentiation
+Unlike generic x402 developer libraries or commodity API wrappers, Relay is designed as production-grade agentic infrastructure:
+- 🤖 **Native Model Context Protocol (MCP) Server:** Relay is the first x402 gateway to provide an official stdio MCP server (`src/mcp/server.ts`). Claude Desktop, Cursor, Windsurf, or CLI workflows (`npm run demo:mcp`) discover and execute all 12 tools natively with zero custom blockchain code.
+- 🛡️ **Atomic, Fail-Closed Budget Safety (`FileBudgetStore`):** The client runtime features an atomic local budget engine that physically halts and fails closed before signing if per-call ceilings (`MAX_PAYMENT_USDC`) or daily allowances (`MAX_DAILY_BUDGET_USDC`) are exceeded.
+- ⚡ **Zero-Gas Settlement on Base:** Leverages EIP-712 `TransferWithAuthorization` under ERC-3009. Primer Systems public facilitator submits transactions and sponsors execution gas. Agents hold only native USDC.
+- 🌐 **Open Capability Provider Marketplace:** The 12 initial endpoints serve as the verified reference catalog. Relay is architected as an open capability network where third-party developers stake $RELAY to register custom APIs and earn streaming USDC per call.
+- 💎 **Vibestarter $RELAY Token Utility:** 50% discount when paying in $RELAY, permanent query allowances via agent quota staking, provider quality bonding, and a deflationary 20% protocol buyback & burn from all gateway USDC settlement fees on Base DEXs.
+
+---
 
 Relay implements the canonical two-phase x402 v2 handshake:
 
