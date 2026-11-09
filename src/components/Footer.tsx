@@ -1,6 +1,7 @@
 import React from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowUpRight01Icon } from '@hugeicons/core-free-icons';
+import { FaXTwitter, FaGithub } from 'react-icons/fa6';
 import { motion, type Variants } from 'motion/react';
 import type { PageRoute } from '../types/navigation';
 
@@ -87,6 +88,28 @@ export const Footer: React.FC<Footer20Props> = ({
                 className="text-neutral-500 group-hover:text-white transition-colors"
               />
             </a>
+
+            {/* Social Channels */}
+            <div className="flex items-center gap-3 mt-3">
+              <a
+                href="https://x.com/relayx4O2"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Relay on X"
+                className="size-9 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white hover:border-neutral-700 hover:bg-neutral-800 transition-all"
+              >
+                <FaXTwitter className="size-4" />
+              </a>
+              <a
+                href="https://github.com/Dominion116/Relay"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Relay on GitHub"
+                className="size-9 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white hover:border-neutral-700 hover:bg-neutral-800 transition-all"
+              >
+                <FaGithub className="size-4" />
+              </a>
+            </div>
           </motion.div>
 
           {/* Right Columns (Focused, essential links only) */}
@@ -159,6 +182,30 @@ export const Footer: React.FC<Footer20Props> = ({
                     className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors inline-flex items-center gap-1"
                   >
                     <span>llms.txt (for AI agents)</span>
+                    <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/Dominion116/Relay"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <FaGithub className="size-3.5 text-neutral-400" />
+                    <span>GitHub repository</span>
+                    <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://x.com/relayx4O2"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[14px] text-neutral-400 hover:text-neutral-200 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <FaXTwitter className="size-3.5 text-neutral-400" />
+                    <span>X (@relayx4O2)</span>
                     <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} className="text-neutral-500" />
                   </a>
                 </li>
